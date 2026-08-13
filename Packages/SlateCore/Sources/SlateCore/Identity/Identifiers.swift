@@ -24,12 +24,57 @@ extension UniqueIdentifier {
     public var description: String {
         rawValue.uuidString
     }
+
+    // MARK: - Wire format
+
+    // Identifiers encode as a bare string — "8B1F…" — rather than as the
+    // object `{"rawValue": "8B1F…"}` that Codable would synthesise.
+    //
+    // Settled at M2, deliberately, because M2 is the milestone that first
+    // writes a document to disk. Before that this is a free choice; afterwards
+    // it is a migration against files sitting on someone's iPad. A document
+    // holds an identifier for every element and every operation, so the
+    // wrapper costs about fifteen bytes per occurrence for nothing, and a
+    // format people have to read while debugging is worth keeping legible.
+    //
+    // These are helpers rather than the `Codable` witnesses themselves.
+    // Providing `init(from:)` directly in a protocol extension competes with
+    // the compiler's own synthesis for conforming types, which is a subtle
+    // way to end up with a format nobody chose. Each concrete type wires
+    // these up explicitly in two lines.
+
+    public static func decodeRawValue(from decoder: Decoder) throws -> UUID {
+        let container = try decoder.singleValueContainer()
+        let string = try container.decode(String.self)
+
+        guard let uuid = UUID(uuidString: string) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "'\(string)' is not a valid UUID"
+            )
+        }
+
+        return uuid
+    }
+
+    public func encodeRawValue(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue.uuidString)
+    }
 }
 
 /// Identifies a document — one canvas, one file, one thing in the document list.
 public struct DocumentID: UniqueIdentifier {
     public let rawValue: UUID
     public init(rawValue: UUID) { self.rawValue = rawValue }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try Self.decodeRawValue(from: decoder))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        try encodeRawValue(to: encoder)
+    }
 }
 
 /// Identifies a single element on a canvas.
@@ -40,6 +85,34 @@ public struct DocumentID: UniqueIdentifier {
 public struct ElementID: UniqueIdentifier {
     public let rawValue: UUID
     public init(rawValue: UUID) { self.rawValue = rawValue }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try Self.decodeRawValue(from: decoder))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        try encodeRawValue(to: encoder)
+    }
+}
+
+/// Identifies a single mutation of a document.
+///
+/// Distinct from the sequence number: the sequence gives an operation its place
+/// in one document's order, while this identifies the operation itself. Once
+/// two devices can both append, sequence numbers collide and identity is what
+/// tells a genuine duplicate from two different edits that happened to land in
+/// the same slot.
+public struct OperationID: UniqueIdentifier {
+    public let rawValue: UUID
+    public init(rawValue: UUID) { self.rawValue = rawValue }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try Self.decodeRawValue(from: decoder))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        try encodeRawValue(to: encoder)
+    }
 }
 
 /// Identifies a bounded area of a canvas that work happens inside — in v1 a
@@ -47,6 +120,14 @@ public struct ElementID: UniqueIdentifier {
 public struct WorkRegionID: UniqueIdentifier {
     public let rawValue: UUID
     public init(rawValue: UUID) { self.rawValue = rawValue }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try Self.decodeRawValue(from: decoder))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        try encodeRawValue(to: encoder)
+    }
 }
 
 /// Identifies the owner of a piece of data.
@@ -58,6 +139,14 @@ public struct WorkRegionID: UniqueIdentifier {
 public struct OwnerID: UniqueIdentifier {
     public let rawValue: UUID
     public init(rawValue: UUID) { self.rawValue = rawValue }
+
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try Self.decodeRawValue(from: decoder))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        try encodeRawValue(to: encoder)
+    }
 
     /// The single owner used throughout v1, before accounts exist.
     ///

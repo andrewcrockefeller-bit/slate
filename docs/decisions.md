@@ -346,3 +346,72 @@ buys a Layer 2 that already compiles for platform number two on the roadmap.
 cannot express; `NSColor.getRed` returns nothing and *traps* if the receiver is
 not in an RGB colour space. The macOS branch converts with
 `usingColorSpace(.sRGB)` first — that call is mandatory, not defensive.
+
+---
+
+## 2026-08-13 — M2: identifiers encode as bare strings
+
+Resolves the deferral recorded at M0.
+
+**Options.** (a) Keep synthesized `Codable`, giving
+`{"rawValue": "8B1F…"}`. (b) Encode as a bare `"8B1F…"`.
+
+**Chose (b), and the timing is the point.** M2 is the first milestone that
+writes a document to disk. Before it, this is a free choice; after it, it is a
+migration against files sitting on a real iPad. A document holds an identifier
+for every element and every operation, so the wrapper costs about fifteen bytes
+per occurrence for nothing, and a format that gets read during debugging is
+worth keeping legible.
+
+**Implementation note.** The encoding helpers live on the `UniqueIdentifier`
+protocol, but each concrete type wires up `init(from:)` and `encode(to:)`
+itself in two lines. Providing the `Codable` witnesses directly in a protocol
+extension competes with the compiler's own synthesis for conforming types,
+which is a quiet way to end up with a wire format nobody chose.
+
+---
+
+## 2026-08-13 — Document state is derived from an operation log
+
+**Options.** (a) Store the document as a blob and re-save it on change.
+(b) Model every change as a discrete ordered operation and derive state by
+replaying them.
+
+**Chose (b).** Invariant 4 requires it, and the reason is worth restating: (a)
+gives two devices two whole files where one has to win, while (b) gives two
+operation streams that can be merged. It also makes undo a replay to an earlier
+point rather than a snapshot stack, and it records what the student did in what
+order — which the tutor loop wants anyway.
+
+**Strictness is deliberate.** Operations carry a gapless sequence number and
+`apply` throws on a gap rather than skipping. A lost operation replayed loosely
+produces a document that looks fine and is quietly missing a stroke from the
+middle of a worked problem, with nothing to indicate it. Failing at the gap is
+recoverable; carrying on is not.
+
+**Deferred, explicitly.** Sequence numbers are per-document and monotonic,
+which is sufficient for one device. Two devices both appending will eventually
+claim the same number. That is where a real CRDT goes; `OperationID` exists
+separately from `sequence` so that a genuine duplicate can be told from two
+different edits landing in the same slot.
+
+---
+
+## 2026-08-13 — `DocumentRepository` is async from the start
+
+**Options.** (a) Synchronous, since the v1 implementation is local files.
+(b) `async` throughout.
+
+**Chose (b).** Retrofitting `async` onto a synchronous protocol means touching
+every call site — precisely the "restructuring" that a cloud-ready shape is
+meant to avoid. An await against a local file costs nothing.
+
+**Errors are translated at the boundary.** `DocumentRepositoryError` speaks in
+documents, not in file paths or HTTP status codes. Layer 1 must not know what a
+path is, and a feature deciding what to show the user should not be switching
+on someone else's error taxonomy.
+
+**`InMemoryDocumentRepository` lives in Layer 1** rather than in tests, because
+it depends on nothing outside the domain and doubles as the reference
+implementation. If it and the file-backed adapter ever disagree, one of them is
+wrong, and this one is easier to read.
