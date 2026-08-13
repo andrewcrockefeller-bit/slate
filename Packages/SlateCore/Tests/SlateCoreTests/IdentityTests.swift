@@ -15,7 +15,7 @@ final class IdentityTests: XCTestCase {
 
     func testDescriptionIsTheUUIDString() {
         let raw = UUID()
-        XCTAssertEqual(WorkRegionID(rawValue: raw).description, raw.uuidString)
+        XCTAssertEqual(OperationID(rawValue: raw).description, raw.uuidString)
     }
 
     func testIdentifierSurvivesACodableRoundTrip() throws {

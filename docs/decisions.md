@@ -415,3 +415,179 @@ on someone else's error taxonomy.
 it depends on nothing outside the domain and doubles as the reference
 implementation. If it and the file-backed adapter ever disagree, one of them is
 wrong, and this one is easier to read.
+
+---
+
+## 2026-08-13 — On-disk format: snapshot plus a JSON Lines tail
+
+**Options.** (a) One JSON file per document, rewritten on every change.
+(b) A snapshot file plus an append-only operation log, compacted periodically.
+
+**Chose (b).** (a) rewrites every stroke ever drawn each time one is added,
+which is both slow and a lie about what changed — and it throws away the
+operation log that Invariant 4 exists to preserve. Appending a line is O(1) and
+is exactly the payload a sync engine would later forward to another device.
+
+**JSON Lines rather than a JSON array.** An array has to be rewritten to add an
+element; a line can be appended to a file opened at its end. It also degrades
+well: a process killed mid-append leaves a partial final line, and everything
+before it still replays, so the document opens missing the last stroke rather
+than not opening at all. There is a test that plants a truncated line and
+expects exactly that.
+
+**Compaction at 500 operations by default.** About one dense page of working, so
+a document opens after replaying at most a page of history. Snapshots are
+written with `.atomic`, which writes to a temporary file and renames — without
+it a crash mid-write leaves a half-written snapshot, the one file that cannot be
+rebuilt from the log.
+
+**Dates are ISO 8601, not the Foundation default.** The default is seconds since
+2001, and a timestamp another platform has to read should not require knowing
+that Apple's epoch is not the Unix one.
+
+---
+
+## 2026-08-13 — Documents live in Application Support, not Documents
+
+**Chose** Application Support. This is app-managed storage in a format only
+Slate reads, not files the user is meant to browse or hand to another app.
+Putting it in `Documents` would expose the internal layout through the Files app
+and make the on-disk shape something we could no longer change freely.
+
+---
+
+## 2026-08-13 — Saves are optimistic; erase rewrites the document
+
+**Optimistic writes.** The canvas has already drawn the stroke by the time
+capture runs. Making the user wait on a disk write to see their own ink would be
+the worst trade available in this product, so the operation is applied to the
+in-memory document immediately and persisted after. A failed write turns the
+status line red; the ink stays on screen either way.
+
+**Saves are chained, not concurrent.** Persistence runs off the main actor, so
+two quick strokes could otherwise race and write their operations out of order.
+Each save awaits the previous one.
+
+**Erase, undo, and clear rewrite the whole document.** `PKCanvasViewDelegate`
+reports *that* the drawing changed and never *how* — there is no erase callback
+— and the strokes that come back carry no identity tying them to what was there
+before. So the only correct response is to remove every element and re-insert
+what remains.
+
+The cost is real: erasing one stroke on a 200-stroke canvas writes 400
+operations. Accepted for now because it is off the writing path and compaction
+folds it away. The fix, if it starts to hurt, is stable stroke identity —
+`PKStroke.id` exists and would turn this into a true diff — but whether that
+identity survives an erase has not been verified, and guessing would be exactly
+the kind of invented API this project does not ship.
+
+---
+
+## 2026-08-13 — Linux CI and the macOS build are complementary, not ranked
+
+**What happened.** M2's Layer 1 went green on Linux CI, then failed to build on
+macOS. The cause: `XCTAssertEqual(try await repo.document(id).title, "…")`. The
+XCTest assertion macros take `@autoclosure` arguments, and an autoclosure cannot
+contain an `await`. Apple's XCTest and swift-corelibs-xctest declare those
+macros differently, so the same source is legal on one platform and rejected on
+the other.
+
+**Why it matters beyond the fix.** I had been treating the Linux job as the
+strictly stricter check — the one that catches what a Mac build would let
+through, because Linux lacks every Apple framework. That is wrong in one
+direction: Linux is stricter about *what exists*, and can be laxer about *what
+type-checks*. A green CI run proves portability. It does not prove the app
+builds.
+
+**Consequence.** Both checks are load-bearing and neither substitutes for the
+other. `./Tools/setup-mac.sh` before delivering; CI on every push.
+
+**Practical trap worth remembering.** `XCTUnwrap` is also an autoclosure, and a
+grep for `XCTAssert.*await` misses it — which it did here, on the first attempt
+at this fix. The pattern that catches every XCTest entry point is
+`XCT[A-Za-z]*(.*await`.
+
+---
+
+## 2026-08-13 — M3: work regions are canvas elements, not a parallel collection
+
+**Options.** (a) A separate `regions` array on `Document` with its own
+operation cases. (b) A `.workRegion` case on `CanvasElement`.
+
+**Chose (b).** A region has identity, bounds, and a lifetime on the canvas —
+everything an element has. Modelling it as one means insert, replace, remove,
+ordering, replay, and persistence all apply to it with no new code and no new
+tests of the same machinery, and the operation log has one address space instead
+of two.
+
+**Consequence, and a correction.** `WorkRegionID` — added speculatively at M0 —
+is deleted. Elements are addressed by `ElementID`, and a second identifier type
+for a thing that is an element would mean operations needed two kinds of
+address. Nothing had been persisted with it, so the removal is free; it would
+not have been a month from now.
+
+---
+
+## 2026-08-13 — A stroke belongs to the region containing its centre
+
+**Options.** (a) Any overlap. (b) Full containment. (c) The centre of the
+stroke's path bounds.
+
+**Chose (c).** (a) lets one stroke belong to two problems at once, which makes
+"the work in problem 3" ambiguous and the session record untrustworthy. (b)
+loses real work: handwriting spills constantly — a descender, a long fraction
+bar, a bracket reaching into the margin — and a stroke that strays outside the
+box is still the work it was written for.
+
+The centre rule gives every stroke exactly one region, keeps spilled strokes
+with the problem they started in, and is cheap. `intersects` remains available
+separately for hit-testing and cropping, which are different questions.
+
+**Cropping uses a different rule on purpose.** `captureBounds` grows the region
+to cover everything it claims, then pads. Sending a model a crop clipped to the
+drawn box would cut off the bottom of a fraction, and a model reading a clipped
+crop reads it confidently and wrongly.
+
+---
+
+## 2026-08-13 — Two region states are observed, two are declared
+
+`untouched` and `inProgress` follow from whether there is work inside the
+region, and the app moves between them on its own. `complete` and `setAside` are
+judgements — by the student or by the tutor — and `observedState` returns them
+unchanged.
+
+The reason is concrete: without the distinction, erasing a stroke inside a
+finished problem would silently un-finish it. That is infuriating in the moment
+and it also destroys the session record of what was actually completed.
+
+**`updatingState` returns an optional.** `nil` means "already correct", which is
+what stops a stroke inside an already-in-progress region from writing a
+pointless operation on every pen-up.
+
+---
+
+## 2026-08-13 — Guard against SwiftPM's stale build plan for path dependencies
+
+**Symptom.** `SlateCore` compiled and passed its tests at step 3. At step 4,
+`SlatePlatform` rebuilt the same `SlateCore` sources and failed with
+`cannot find type 'WorkRegion' in scope` — for a type sitting in a file on disk
+that had just compiled cleanly a step earlier.
+
+**Cause.** SwiftPM caches a build plan per package, including the source file
+list of its local path dependencies. `SlatePlatform/.build/debug.yaml` was
+stamped 23:03 and listed `CanvasElement.swift` but not `WorkRegion.swift`, which
+landed at 23:27. Adding a *new* file to a path dependency did not invalidate the
+dependent package's plan.
+
+**The tell, worth remembering.** Same source, two builds, two different answers.
+When a type "cannot be found" in one build and compiles in another minutes
+earlier, suspect the build system before the code.
+
+**Fix.** `setup-mac.sh` now clears `SlatePlatform/.build` when any SlateCore
+source is newer than that cached plan. Conditional rather than unconditional:
+cleaning every run would add minutes to a script meant to be run constantly,
+and the condition is exactly the situation that breaks.
+
+This will recur on every milestone that adds a Layer 1 file, which is most of
+them, so it belongs in the script rather than in anyone's memory.

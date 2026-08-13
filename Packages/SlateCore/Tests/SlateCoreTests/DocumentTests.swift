@@ -401,6 +401,7 @@ final class InMemoryDocumentRepositoryTests: XCTestCase {
 
         try await repo.rename(document.id, to: "Section 3.2")
 
-        XCTAssertEqual(try await repo.document(document.id).title, "Section 3.2")
+        let reloaded = try await repo.document(document.id)
+        XCTAssertEqual(reloaded.title, "Section 3.2")
     }
 }

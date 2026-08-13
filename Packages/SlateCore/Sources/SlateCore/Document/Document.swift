@@ -51,6 +51,54 @@ public struct Document: Entity, Hashable, Sendable, Codable {
         elements.compactMap(\.inkStroke)
     }
 
+    /// Every work region, in the order they were created.
+    public var workRegions: [WorkRegion] {
+        elements.compactMap(\.workRegion)
+    }
+
+    /// The region a stroke belongs to, or `nil` if it was drawn outside them
+    /// all.
+    ///
+    /// First match wins when regions overlap. Overlapping regions are a user
+    /// mistake rather than a supported arrangement, and picking deterministically
+    /// beats picking cleverly: the same stroke lands in the same problem every
+    /// time, which is what makes the session record trustworthy.
+    public func region(claiming stroke: InkStroke) -> WorkRegion? {
+        workRegions.first { $0.claims(stroke) }
+    }
+
+    /// Every stroke a region claims, in draw order.
+    public func strokes(in region: WorkRegion) -> [InkStroke] {
+        inkStrokes.filter(region.claims)
+    }
+
+    /// Whether a region has any work in it.
+    public func hasWork(in region: WorkRegion) -> Bool {
+        inkStrokes.contains(where: region.claims)
+    }
+
+    /// The number the next region created should carry.
+    ///
+    /// One past the highest in use rather than the count, so that deleting
+    /// Problem 2 of three does not produce a second Problem 3.
+    public var nextRegionOrdinal: Int {
+        (workRegions.map(\.ordinal).max() ?? 0) + 1
+    }
+
+    /// Regions whose stored state disagrees with their contents, paired with
+    /// the state they should be in.
+    ///
+    /// Returned rather than applied, because changing a region is an operation
+    /// like any other and this type does not get to mutate itself behind the
+    /// caller's back. Empty in the common case, which is what keeps a stroke
+    /// inside an already-in-progress region from writing an operation on every
+    /// pen-up.
+    public func regionsNeedingStateUpdate(at moment: Date) -> [WorkRegion] {
+        workRegions.compactMap { region in
+            region.updatingState(hasWork: hasWork(in: region), at: moment)
+        }
+    }
+
     /// The area covered by everything on the canvas, or `.zero` when empty.
     public var contentBounds: CanvasRect {
         elements.reduce(CanvasRect.zero) { $0.union($1.renderBounds) }

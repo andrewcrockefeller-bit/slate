@@ -2,39 +2,48 @@ import Foundation
 
 /// Anything that can sit on a canvas.
 ///
-/// v1 carries one case. It exists as a closed set anyway because the document
-/// format has to survive the arrival of the others: text blocks and outline
-/// nodes in v1.5, imported source documents, tutor hints. Adding a case to an
-/// enum is a compile error at every switch, which is the loud kind of change.
-/// Retrofitting polymorphism onto a stored array of strokes is a migration
-/// against files on someone's iPad, which is the expensive kind.
+/// Work regions are elements rather than a separate collection with their own
+/// operations. They have identity, bounds, and a lifetime on the canvas, so
+/// modelling them as elements means every piece of already-tested operation
+/// machinery — insert, replace, remove, ordering, replay, persistence — applies
+/// to them for free, and the operation log has one address space instead of two.
+///
+/// v1.5 adds text blocks, source documents, and outline nodes. Adding a case is
+/// a compile error at every switch, which is the loud kind of change.
+/// Retrofitting polymorphism onto a stored array of strokes would be a
+/// migration against files on someone's iPad, which is the expensive kind.
 public enum CanvasElement: Hashable, Sendable {
     case ink(InkStroke)
+    case workRegion(WorkRegion)
 
     /// Identity, stable across edits and devices.
     public var id: ElementID {
         switch self {
         case .ink(let stroke): return stroke.id
+        case .workRegion(let region): return region.id
         }
     }
 
     public var lastModified: Date {
         switch self {
         case .ink(let stroke): return stroke.lastModified
+        case .workRegion(let region): return region.lastModified
         }
     }
 
     public var owner: OwnerID {
         switch self {
         case .ink(let stroke): return stroke.owner
+        case .workRegion(let region): return region.owner
         }
     }
 
-    /// The area this element paints, for culling and for cropping a region to
+    /// The area this element occupies, for culling and for cropping a region to
     /// send to a model.
     public var renderBounds: CanvasRect {
         switch self {
         case .ink(let stroke): return stroke.renderBounds
+        case .workRegion(let region): return region.bounds
         }
     }
 
@@ -42,8 +51,21 @@ public enum CanvasElement: Hashable, Sendable {
     public var inkStroke: InkStroke? {
         switch self {
         case .ink(let stroke): return stroke
+        case .workRegion: return nil
         }
     }
+
+    /// The region, if this is one.
+    public var workRegion: WorkRegion? {
+        switch self {
+        case .ink: return nil
+        case .workRegion(let region): return region
+        }
+    }
+
+    /// Whether this element is ink the student drew, as opposed to structure
+    /// laid over it.
+    public var isInk: Bool { inkStroke != nil }
 }
 
 // MARK: - Wire format
@@ -56,6 +78,7 @@ extension CanvasElement: Codable {
     /// enum, cannot silently reinterpret elements already on disk.
     private enum Kind: String, Codable {
         case ink
+        case workRegion
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -65,11 +88,12 @@ extension CanvasElement: Codable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let kind = try container.decode(Kind.self, forKey: .kind)
 
-        switch kind {
+        switch try container.decode(Kind.self, forKey: .kind) {
         case .ink:
             self = .ink(try container.decode(InkStroke.self, forKey: .value))
+        case .workRegion:
+            self = .workRegion(try container.decode(WorkRegion.self, forKey: .value))
         }
     }
 
@@ -80,6 +104,9 @@ extension CanvasElement: Codable {
         case .ink(let stroke):
             try container.encode(Kind.ink, forKey: .kind)
             try container.encode(stroke, forKey: .value)
+        case .workRegion(let region):
+            try container.encode(Kind.workRegion, forKey: .kind)
+            try container.encode(region, forKey: .value)
         }
     }
 }

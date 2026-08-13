@@ -115,21 +115,6 @@ public struct OperationID: UniqueIdentifier {
     }
 }
 
-/// Identifies a bounded area of a canvas that work happens inside — in v1 a
-/// math problem, later a reading passage, outline section, or draft section.
-public struct WorkRegionID: UniqueIdentifier {
-    public let rawValue: UUID
-    public init(rawValue: UUID) { self.rawValue = rawValue }
-
-    public init(from decoder: Decoder) throws {
-        self.init(rawValue: try Self.decodeRawValue(from: decoder))
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        try encodeRawValue(to: encoder)
-    }
-}
-
 /// Identifies the owner of a piece of data.
 ///
 /// v1 has no accounts and every object in the app carries the same value, from

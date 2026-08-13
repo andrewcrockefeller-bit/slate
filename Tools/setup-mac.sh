@@ -52,6 +52,30 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Stale build-plan guard.
+#
+# SwiftPM caches a build plan for each package, including the source file list
+# of its local path dependencies. Adding a NEW file to SlateCore does not always
+# invalidate SlatePlatform's cached plan, so SlatePlatform rebuilds SlateCore
+# from a file list that predates the new file and fails with "cannot find type
+# X in scope" — for a type that is plainly there, in a package that just
+# compiled cleanly on its own a step earlier.
+#
+# That contradiction is the tell: same source, two builds, two answers. Rather
+# than clean unconditionally (which costs minutes on every run), clean only when
+# a SlateCore source is newer than the cached plan that is supposed to describe
+# it.
+PLAN="$ROOT/Packages/SlatePlatform/.build/debug.yaml"
+if [ -f "$PLAN" ]; then
+    if [ -n "$(find "$ROOT/Packages/SlateCore/Sources" -name '*.swift' -newer "$PLAN" -print -quit 2>/dev/null)" ]; then
+        dim "SlateCore has sources newer than SlatePlatform's cached build plan."
+        dim "Clearing it so the new files are picked up..."
+        rm -rf "$ROOT/Packages/SlatePlatform/.build"
+        green "OK"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 step "1/6  Toolchain"
 
 if ! command -v xcodebuild >/dev/null 2>&1; then

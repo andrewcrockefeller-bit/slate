@@ -3,11 +3,11 @@ import SlateCore
 
 /// The canvas.
 ///
-/// M1: ink capture. You draw with a Pencil, PencilKit renders it, and every
-/// finished stroke is converted into the canonical `InkStroke` record that the
-/// rest of the product is built on. Problem regions, persistence, and the tutor
-/// loop arrive in later milestones; this screen deliberately contains no logic
-/// beyond presenting what the controller reports.
+/// M2: ink capture and persistence. Strokes are converted into the canonical
+/// document, every change is written as an ordered operation, and the document
+/// is reloaded on launch. Problem regions and the tutor loop arrive later; this
+/// screen deliberately contains no logic beyond presenting what the controller
+/// reports.
 struct CanvasScreen: View {
     let environment: AppEnvironment
 
@@ -16,7 +16,10 @@ struct CanvasScreen: View {
     init(environment: AppEnvironment) {
         self.environment = environment
         _controller = StateObject(
-            wrappedValue: CanvasController(timeSource: environment.timeSource)
+            wrappedValue: CanvasController(
+                repository: environment.documents,
+                timeSource: environment.timeSource
+            )
         )
     }
 
@@ -26,8 +29,7 @@ struct CanvasScreen: View {
         // PKToolPicker docks along the bottom edge on iPad and sits above the
         // app's own content, so anything placed bottom-leading is hidden behind
         // the palette exactly when the canvas is in use. Found by running it,
-        // not by reading it — the layout is correct in isolation and wrong in
-        // the only configuration that ships.
+        // not by reading it.
         ZStack(alignment: .topLeading) {
             InkCanvasView(controller: controller)
                 .ignoresSafeArea()
@@ -40,6 +42,9 @@ struct CanvasScreen: View {
             editingControls
                 .padding(.horizontal, 20)
                 .padding(.vertical, 14)
+        }
+        .task {
+            await controller.start()
         }
     }
 
@@ -68,15 +73,15 @@ struct CanvasScreen: View {
         .background(.thinMaterial, in: Capsule())
     }
 
-    /// Reports what the domain model actually captured, not what PencilKit
-    /// drew. The two agreeing is the whole point of the milestone, and the
-    /// cheapest way to see that they do is to print the domain's version.
+    /// Reports what the domain model captured and whether it reached disk —
+    /// not what PencilKit drew. The two agreeing is the point of the milestone,
+    /// and the cheapest way to see that they do is to print the domain's view.
     private var statusLine: some View {
         HStack(spacing: 10) {
             Text("SLATE")
                 .font(.system(.caption, design: .monospaced).weight(.semibold))
 
-            Text("M1")
+            Text("M2")
                 .font(.system(.caption2, design: .monospaced))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
@@ -86,14 +91,38 @@ struct CanvasScreen: View {
                 .font(.system(.caption2, design: .monospaced))
                 .lineLimit(1)
 
-            Text(verbatim: environment.config.isValid ? "config ok" : "config INVALID")
-                .font(.system(.caption2, design: .monospaced))
-                .foregroundStyle(environment.config.isValid ? Color.secondary : Color.red)
+            saveIndicator
         }
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.thinMaterial, in: Capsule())
+    }
+
+    @ViewBuilder
+    private var saveIndicator: some View {
+        switch controller.saveState {
+        case .loading:
+            Text("opening…")
+                .font(.system(.caption2, design: .monospaced))
+        case .ready:
+            Text("ready")
+                .font(.system(.caption2, design: .monospaced))
+        case .saving:
+            Text("saving…")
+                .font(.system(.caption2, design: .monospaced))
+        case .saved:
+            Text("saved")
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(.secondary)
+        case .failed(let reason):
+            // Loud on purpose. A failed write with a calm status line is how a
+            // student loses an hour of work without noticing.
+            Text("SAVE FAILED: \(reason)")
+                .font(.system(.caption2, design: .monospaced).weight(.semibold))
+                .foregroundStyle(.red)
+                .lineLimit(1)
+        }
     }
 }
 
