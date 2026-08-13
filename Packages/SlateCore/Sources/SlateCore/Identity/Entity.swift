@@ -9,7 +9,15 @@ import Foundation
 /// This exists at M0, before there is anything to persist, because the cost of
 /// conforming a new type is one line and the cost of adding these fields to
 /// types that already have user data on disk is a migration.
-public protocol Entity: Identifiable, Sendable {
+/// Deliberately does NOT refine `Identifiable`.
+///
+/// `Identifiable` exists for SwiftUI's benefit — it is how a `List` tells rows
+/// apart — and on Apple platforms it carries an availability annotation, which
+/// would leak a deployment-target constraint into the domain core for a
+/// protocol the domain has no use for. Any concrete type conforming to `Entity`
+/// already satisfies `Identifiable`'s only requirement, so Layer 3 can add
+/// `extension Document: Identifiable {}` for free where it actually needs it.
+public protocol Entity: Sendable {
     associatedtype ID: UniqueIdentifier
 
     var id: ID { get }

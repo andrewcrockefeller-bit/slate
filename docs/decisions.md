@@ -184,3 +184,134 @@ abandonment story a dependency can have.
 **Consequence.** `*.xcodeproj` is gitignored. A fresh clone requires
 `xcodegen generate` before Xcode will open anything, which is documented in the
 README and the runbook.
+
+---
+
+## 2026-08-13 — `Entity` does not refine `Identifiable`; SlateCore declares platforms
+
+**Context.** The first real compile of Layer 1 failed on `Entity.swift` with two
+diagnostics, both of them consequences of choices made earlier the same day:
+
+    redeclaration of associated type 'ID' from protocol 'Identifiable'
+    is better expressed as a 'where' clause on the protocol
+
+    'Identifiable' is only available in macOS 10.15 or newer
+
+**Options for the first.** (a) `protocol Entity: Identifiable, Sendable where
+ID: UniqueIdentifier`. (b) Drop the `Identifiable` refinement and declare the
+associated type directly.
+
+**Chose (b).** (a) compiles and is the mechanical fix, which is why it is
+tempting. But `Identifiable` exists for SwiftUI — it is how a `List` tells rows
+apart — and on Apple platforms it carries an availability annotation. Refining
+it drags a UI framework's deployment-target constraint into the domain core in
+exchange for nothing the domain uses. Any type conforming to `Entity` already
+satisfies `Identifiable`'s single requirement, so Layer 3 writes
+`extension Document: Identifiable {}` where it actually needs it, and Layer 1
+stays free of the concept.
+
+**Options for the second.** (a) Add `@available` annotations. (b) Declare
+`platforms:` in SlateCore's manifest.
+
+**Chose (b), reversing an earlier decision made for bad reasons.** The original
+manifest deliberately omitted `platforms:` on the theory that declaring them
+would make Layer 1 "look Apple-shaped." That was aesthetics, and it was wrong.
+`platforms:` sets minimum deployment targets used only when building for Apple
+platforms; SwiftPM ignores it entirely on Linux, so it costs nothing in
+portability. Omitting it means SwiftPM assumes macOS 10.13, under which any
+standard-library API from the last eight years is an availability error — a trap
+that would have fired repeatedly through M1 and whose tempting fix is
+`@available` scattered through the domain core.
+
+**Lesson worth keeping.** Both errors were introduced by reasoning about
+portability from appearances rather than from what the build system actually
+does. The Linux CI job is the check that matters; a manifest that merely looks
+platform-neutral proves nothing.
+
+---
+
+## 2026-08-13 — M1: control points, not interpolated points, are the record
+
+**Options.** (a) Store the on-curve points from `interpolatedPoints(in:by:)`.
+(b) Store the B-spline control points obtained by iterating `PKStrokePath`.
+
+**Chose (b).** The control points are what PencilKit itself stores, which makes
+them the closest available thing to a raw capture; the on-curve points are
+derived from them and can be recomputed at any density at any time. Storing a
+derivative as the canonical record would mean permanently baking in whatever
+stride we happened to choose, and would lose information every save.
+
+**Unverified at the time of writing.** That iterating a `PKStrokePath` yields
+`PKStrokePoint` control points is not stated outright in the documentation,
+which describes the type's collection conformances only in the abstract. It is
+the first thing to check when this compiles.
+
+---
+
+## 2026-08-13 — Stroke transforms are baked into coordinates at capture
+
+**Options.** (a) Carry `PKStroke.transform` alongside the points, applying it at
+render time. (b) Apply it once at capture so stored coordinates are final.
+
+**Chose (b).** A stroke whose positions are only correct once some other field
+is applied is an implicit coupling, and the first renderer on another platform
+that does not know about the extra field draws the document wrong. Widths scale
+by the transform's uniform scale, since a width is a scalar and cannot be
+transformed as a point.
+
+**Consequence.** `CanvasTransform.uniformScale` takes the square root of the
+*absolute* determinant. Without the absolute value a mirroring transform
+produces NaN, which propagates into every width in the document silently.
+There is a test for exactly this.
+
+---
+
+## 2026-08-13 — Input capabilities are inferred from variance, in Layer 1
+
+**Problem.** Capture frameworks do not report which device produced a stroke.
+Pressure and tilt fields arrive populated whether or not the hardware can
+measure them, filled with a constant when it cannot.
+
+**Chose** inferring from variance — a value that never changes across a stroke
+was not measured — and putting the inference in the domain core rather than in
+the PencilKit adapter, so every platform's capture path shares one
+implementation and it is testable without a device.
+
+**Known false negative.** A very short stroke, or one drawn with unusually even
+pressure, reads as having none. That is the right way to be wrong: treating
+absent data as present makes a renderer draw a mouse line with a fake pressure
+taper, while treating present data as absent only loses a subtlety.
+
+---
+
+## 2026-08-13 — Ingestion happens on pen-up, and incrementally
+
+**Options.** (a) Convert the whole drawing on `canvasViewDrawingDidChange`.
+(b) Convert on `canvasViewDidEndUsingTool`, converting only appended strokes.
+
+**Chose (b).** (a) is O(every point ever drawn) on every change event, and
+change events fire repeatedly *during* a stroke — so it does the work many times
+over, on the hot path of writing, and produces intermediate records for strokes
+that were never finished. Ink feel outranks every other consideration; this is
+the first place that rule has teeth.
+
+**The fallback is deliberate.** Anything that is not a pure append — erase, undo,
+clear — triggers a full rebuild, because `PKCanvasViewDelegate` reports *that*
+the drawing changed and never *how*. There is no erase callback at all. That
+absence is also why the v1.5 addendum's erase-burst trigger (T2) is flagged as
+needing a spike rather than costed as a given.
+
+---
+
+## 2026-08-13 — Ink type is mapped by equality, not by exhaustive switch
+
+**Context.** `PKInk.InkType` is a type alias for `PKInkingTool.InkType`, whose
+membership has grown across releases (monoline, fountain pen, watercolor,
+crayon), and whose documentation returned 404 at every URL tried.
+
+**Chose** comparing against the three types that have existed since iOS 14 and
+falling back to `.pen`, rather than switching exhaustively. An exhaustive switch
+would stop compiling on a future SDK. More importantly, pinning the domain's
+vocabulary to Apple's would break Invariant 5 the moment a platform with no
+"watercolor" had to open the document. An unrecognised mark renders as a pen
+mark, which is the correct failure.

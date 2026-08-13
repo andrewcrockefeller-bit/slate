@@ -1,3 +1,27 @@
+*****************************************************************************
+SUPERSEDED IN PART — read this first (2026-08-13)
+*****************************************************************************
+
+Steps 1, 2 and 3 of this runbook are now done, or automated:
+
+  - The repo is already unzipped here and has an initial commit.
+  - STEPS 4 and 5 (creating the Xcode project by hand, dragging package
+    folders into the navigator, linking targets) NO LONGER APPLY. The project
+    is generated from project.yml by XcodeGen. See docs/decisions.md.
+
+Do this instead:
+
+      ./Tools/setup-mac.sh
+
+It checks the toolchain, runs the layer-purity guard, builds and tests both
+packages, installs XcodeGen if needed, generates Slate.xcodeproj, and prints
+the remaining device steps. Safe to re-run.
+
+Everything below is kept for the appendix and for step 6 (signing and running
+on the iPad), which still applies.
+*****************************************************************************
+
+
 =============================================================================
 M0 — SETUP RUNBOOK
 Getting the skeleton running on a physical iPad, and CI green on Linux

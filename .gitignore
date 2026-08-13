@@ -16,3 +16,7 @@ DerivedData/
 *.xcscmblueprint
 *.xccheckout
 build/
+
+# XcodeGen built from source when Homebrew is not available.
+# Tools/xcodegen-version.txt IS committed — it pins the generator commit.
+Tools/.xcodegen-src/

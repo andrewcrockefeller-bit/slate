@@ -24,6 +24,17 @@ options:
   createIntermediateGroups: true
   generateEmptyDirectories: true
 
+# Project-level defaults, inherited by every target.
+#
+# XcodeGen defaults SWIFT_VERSION to 5.0 at the project level. The app target
+# overrides it below, so the app was always building correctly — but any target
+# added later (the first XCTest target, an app extension) would silently
+# inherit Swift 5 mode and behave differently from the packages for no visible
+# reason. Setting it here makes the whole project uniform.
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+
 # Layer 1 and Layer 2 as local packages. The app depends on both; neither
 # depends on the app, and SlateCore depends on nothing at all.
 packages:
