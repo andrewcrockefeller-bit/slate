@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The only job that matters for Invariant 1.
+  #
+  # If Layer 1 builds and passes its tests on Linux, it contains no Apple types,
+  # which is the property that keeps the Android and Windows ports tractable.
+  # This is deliberately not a macOS job: a green build on a Mac proves nothing
+  # about portability, because every Apple framework is sitting right there.
+  #
+  # Runs in the official Swift image rather than through a third-party setup
+  # action, so CI depends on nothing we do not control.
+  layer1-linux:
+    name: Layer 1 on Linux
+    runs-on: ubuntu-latest
+    container: swift:6.0
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      # Runs before the build on purpose. A purity violation should be reported
+      # as a purity violation, not as a confusing compile error 90 seconds later.
+      - name: Layer purity
+        run: ./Tools/check-layer-purity.sh
+
+      - name: Build SlateCore
+        run: swift build --package-path Packages/SlateCore
+
+      - name: Test SlateCore
+        run: swift test --package-path Packages/SlateCore

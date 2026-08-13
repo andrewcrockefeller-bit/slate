@@ -1,0 +1,317 @@
+=============================================================================
+M0 — SETUP RUNBOOK
+Getting the skeleton running on a physical iPad, and CI green on Linux
+=============================================================================
+
+WHAT M0 IS
+----------
+The skeleton. Three layers with enforced boundaries, a domain core that builds
+and tests on Linux, a guard that fails the build if anything Apple-only gets
+into it, and an app that launches to a blank canvas.
+
+There is no ink yet. That is M1. If you draw on the screen nothing will happen,
+and that is the correct behavior for this milestone.
+
+WHAT YOU SHOULD SEE WHEN IT WORKS
+  On the iPad:  a near-white full-screen canvas with a small monospaced status
+                line in the bottom-left reading:
+                    SLATE  M0  stall 4.0s  cooldown 20.0s  config ok
+                Those numbers are read out of the domain package. If they
+                render, Layer 1 is linked and reachable from Layer 3, which is
+                the whole on-device acceptance criterion for this milestone.
+  On GitHub:    a green "Layer 1 on Linux" check on your first push.
+
+TIME REQUIRED
+  About 20 minutes, most of it Xcode project creation and signing.
+
+WHAT I COULD NOT DO FROM MY END
+  The cloud container I work in has no Swift toolchain — swift.org downloads are
+  blocked by its network allowlist — so I could not compile any of this or run
+  the tests. The layer-purity script I DID run, including against a deliberately
+  planted violation, so that one is verified. Everything Swift is written but
+  unbuilt. Step 3 below is where you find out. If something does not compile,
+  paste the error and I will fix it; do not work around it yourself, because a
+  workaround in Layer 1 is how the invariant erodes.
+
+
+-----------------------------------------------------------------------------
+STEP 1 — PREREQUISITES
+-----------------------------------------------------------------------------
+
+  1.1  Xcode 16 or later. The packages declare swift-tools-version 6.0, which
+       Xcode 15 cannot read.
+         Check:  xcodebuild -version
+
+  1.2  Command line tools selected.
+         Check:  xcode-select -p
+         If it prints a CommandLineTools path rather than an Xcode.app path:
+             sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+  1.3  An Apple ID added to Xcode for device signing.
+         Xcode > Settings > Accounts > + > Apple ID
+       A free account is fine. It signs builds that run on your own device for
+       seven days before needing a re-run from Xcode. A paid Developer Program
+       membership is not required until TestFlight, which is M8.
+
+  1.4  Your iPad connected by cable, unlocked, and trusted.
+       On the iPad: Settings > Privacy & Security > Developer Mode > on.
+       The iPad will restart when you enable it.
+
+
+-----------------------------------------------------------------------------
+STEP 2 — PUT THE REPO SOMEWHERE
+-----------------------------------------------------------------------------
+
+  2.1  Unzip slate.zip wherever you keep code. It will produce a folder named
+       slate/.
+
+  2.2  Make it a git repository:
+             cd slate
+             git init
+             git add -A
+             git commit -m "M0: three-layer skeleton, Linux CI, purity guard"
+
+  2.3  Create an empty repo on GitHub — no README, no .gitignore, the repo
+       already has one — then:
+             git remote add origin <your-repo-url>
+             git branch -M main
+             git push -u origin main
+
+       Do not push yet if you would rather verify locally first. Step 6 is
+       where the push matters.
+
+
+-----------------------------------------------------------------------------
+STEP 3 — VERIFY LAYER 1 BEFORE TOUCHING XCODE
+-----------------------------------------------------------------------------
+
+This is the step that tells you whether the code I wrote actually compiles. Do
+it before the Xcode work, because debugging a compile error is much easier
+without a project configuration in the way.
+
+  3.1  Run the purity guard:
+             ./Tools/check-layer-purity.sh
+
+       Expect:
+             Layer purity OK — SlateCore is Foundation-only.
+
+  3.2  Build and test the domain core:
+             swift test --package-path Packages/SlateCore
+
+       Expect: a build, then roughly 20 tests passing across three suites —
+       IdentityTests, ProvenanceTests, TimeSourceTests, TutorConfigTests.
+
+  3.3  Build and test Layer 2:
+             swift test --package-path Packages/SlatePlatform
+
+       Expect: three tests passing. This one only builds on a Mac, by design.
+
+  IF STEP 3.2 FAILS
+    Send me the full error text. The most likely causes, in order:
+      - a Swift 6 strict-concurrency complaint about a protocol conformance
+      - the `some TimeSource` parameter in Provenance's initializer
+      - synthesized Codable on the identifier structs
+    All three are things I would rather fix properly than have you patch around.
+
+
+-----------------------------------------------------------------------------
+STEP 4 — CREATE THE XCODE PROJECT
+-----------------------------------------------------------------------------
+
+The repo deliberately does not contain an .xcodeproj. Generated project files
+are large, opaque, merge badly, and are not something I can write reliably
+without Xcode. You create it once, here, and it is then yours.
+
+  4.1  Xcode > File > New > Project…
+       Choose:  iOS  >  App    (NOT "Multiplatform")
+       Next.
+
+  4.2  Fill in:
+         Product Name:        Slate
+         Team:                your Apple ID
+         Organization Id:     something you own, reverse-DNS
+                              (whatever you use for your web work is fine)
+         Interface:           SwiftUI
+         Language:            Swift
+         Storage:             None
+         Testing System:      None
+       Leave "Use Core Data" and "Include Tests" unchecked. Next.
+
+  4.3  Save it INSIDE the slate/ folder you unzipped — the same directory that
+       contains Packages/ and App/. When Xcode offers to create a git
+       repository, UNCHECK it; the repo already exists.
+
+       You should now have:
+             slate/
+               Slate.xcodeproj
+               Slate/                 <- Xcode's generated sources
+               Packages/
+               App/
+               Tools/
+               docs/
+
+  4.4  Xcode generated two files inside slate/Slate/ that we are replacing:
+       SlateApp.swift and ContentView.swift. In the Project Navigator, select
+       both, right-click > Delete > "Move to Trash".
+
+       Leave Assets.xcassets and any Preview Content alone.
+
+
+-----------------------------------------------------------------------------
+STEP 5 — WIRE THE LAYERS INTO THE PROJECT
+-----------------------------------------------------------------------------
+
+  5.1  ADD THE LOCAL PACKAGES.
+       In Finder, open slate/. Drag the Packages/SlateCore folder into the
+       Xcode Project Navigator, dropping it at the top level of the project
+       (below the blue Slate project icon, not inside the Slate group).
+       In the sheet that appears:
+           - "Copy items if needed"  UNCHECKED  (important — we want the files
+             to stay where they are, referenced in place)
+           - "Create groups" selected
+           - Add to targets: leave unchecked
+       Repeat for Packages/SlatePlatform.
+
+       Both should now appear in the navigator with a package icon. If they
+       appear as plain yellow folders instead, you dropped them inside a group
+       — undo and retry at the top level.
+
+       (Alternative if dragging misbehaves: File > Add Package Dependencies…,
+       then the "Add Local…" button at the bottom of the sheet, and select the
+       package folder. Same result. The button's exact position moves between
+       Xcode versions.)
+
+  5.2  LINK THEM TO THE APP TARGET.
+       Select the blue Slate project icon > TARGETS > Slate > General tab.
+       Under "Frameworks, Libraries, and Embedded Content", click + and add:
+             SlateCore
+             SlatePlatform
+       Both should appear with "Do Not Embed" — that is correct for static
+       libraries.
+
+  5.3  ADD THE APP SOURCES.
+       Drag these three files from App/Slate/ into the Slate group in the
+       navigator:
+             SlateApp.swift
+             AppEnvironment.swift
+             CanvasScreen.swift
+       In the sheet:
+           - "Copy items if needed"  UNCHECKED
+           - Add to targets: Slate  CHECKED
+       (Unchecking "copy" keeps one copy of each file, living in App/Slate/
+       where the repo layout expects it, rather than duplicating them into
+       Xcode's generated folder.)
+
+  5.4  SET THE DEPLOYMENT TARGET.
+       Same General tab, "Minimum Deployments" > iOS: set to 17.0.
+
+       This must be 17.0 or higher. SlatePlatform declares .iOS(.v17), and a
+       lower app deployment target produces a link error that reads as though
+       the package is broken when it is actually the app that is misconfigured.
+
+  5.5  SET ORIENTATION.
+       General tab > "Supported Destinations" should list iPad. Under
+       Deployment Info, leave all four orientations checked. The canvas is
+       orientation-agnostic and Invariant 5 says nothing may assume a screen
+       shape.
+
+  5.6  BUILD.
+             Cmd-B
+       Expect: build succeeded, no warnings.
+
+       If you get "No such module 'SlateCore'": the package was added to the
+       project but not linked to the target. Redo 5.2.
+
+
+-----------------------------------------------------------------------------
+STEP 6 — RUN IT, AND GET CI GREEN
+-----------------------------------------------------------------------------
+
+  6.1  Select your iPad in the scheme destination menu at the top of the Xcode
+       window. Cmd-R.
+
+  6.2  First run on a device will stop with a signing error until you trust the
+       developer certificate on the iPad:
+             Settings > General > VPN & Device Management > your Apple ID
+             > Trust
+       Then Cmd-R again.
+
+  6.3  WHAT YOU SHOULD SEE:
+       A near-white canvas filling the screen. Bottom-left, small and
+       monospaced:
+
+             SLATE  M0  stall 4.0s  cooldown 20.0s  config ok
+
+       Rotate the iPad; the status line should stay bottom-left and nothing
+       should reflow oddly. Drawing does nothing — correct for M0.
+
+       If "config ok" reads "config INVALID" in red, the defaults in
+       TutorConfig fail their own validation, which would mean I got a default
+       wrong. Tell me; it is a one-line fix.
+
+  6.4  COMMIT THE XCODE PROJECT AND PUSH.
+             git add -A
+             git commit -m "M0: Xcode project"
+             git push
+
+  6.5  On GitHub, open the Actions tab. The "Layer 1 on Linux" job should run
+       in a swift:6.0 container and go green in about two minutes. That green
+       check is the real M0 acceptance criterion — it is the first mechanical
+       proof that the domain core is portable.
+
+       If the job cannot pull swift:6.0, bump the container tag in
+       .github/workflows/ci.yml to a current one and push again.
+
+
+-----------------------------------------------------------------------------
+STEP 7 — WHAT TO CONFIRM BACK TO ME
+-----------------------------------------------------------------------------
+
+Four things, and then M1:
+
+  [ ] swift test --package-path Packages/SlateCore  passes locally
+  [ ] The app launches on the physical iPad and the status line reads
+      "config ok"
+  [ ] The "Layer 1 on Linux" CI job is green
+  [ ] ./Tools/check-layer-purity.sh passes
+
+If any of the four fails, send the error rather than working around it.
+
+
+-----------------------------------------------------------------------------
+APPENDIX — THINGS WORTH KNOWING
+-----------------------------------------------------------------------------
+
+WHY THERE IS NO .xcodeproj IN THE REPO
+  It is generated, enormous, and merges badly. It is also the one artifact I
+  cannot produce reliably without Xcode, and a hand-written project file that
+  half-works is worse than no project file. You create it once. From M1 onward
+  everything I send is source files that drop into the structure you just built.
+
+WHY LAYER 2 EXISTS AT M0 WITH ONE TINY TYPE IN IT
+  SystemTimeSource is nine lines and does nothing but call Date(). It is there
+  so the adapter seam exists and is proven before anything important goes
+  through it. Every later adapter — ink capture, persistence, the AI provider,
+  Keychain — has exactly this shape: a protocol in Layer 1, a thin conformance
+  in Layer 2, wired once in AppEnvironment.
+
+WHY THE STATUS LINE READS CONFIG VALUES
+  So that "the app launched" and "the app launched with the domain package
+  actually linked and readable" are distinguishable by looking at the screen
+  rather than by trusting the build system.
+
+RUN THE PURITY CHECK BEFORE YOU COMMIT
+  It takes under a second and it is the difference between catching an Apple
+  type in Layer 1 now and catching it in six months when it has friends.
+      ./Tools/check-layer-purity.sh
+
+WHAT M1 IS
+  Ink. PencilKit capture into the normalized stroke model, rendering, infinite
+  pan and zoom, undo/redo, palm rejection. The acceptance criterion is that you
+  cannot tell it apart from Freeform by feel — and if you can, we stop and fix
+  it before M2, because ink feel outranks every other consideration in this
+  product.
+
+=============================================================================
+END OF RUNBOOK
+=============================================================================

@@ -1,0 +1,18 @@
+.DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode
+#
+# The project is generated from project.yml by XcodeGen and is therefore not
+# committed. Run `xcodegen generate` after cloning, or after adding a file.
+*.xcodeproj
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.xcscmblueprint
+*.xccheckout
+build/

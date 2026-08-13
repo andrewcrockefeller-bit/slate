@@ -1,0 +1,77 @@
+# XcodeGen spec.
+#
+# The .xcodeproj is generated from this file, not committed. Regenerate with:
+#
+#     xcodegen generate
+#
+# Why this exists: a hand-maintained Xcode project is an opaque binary-ish
+# artifact that merges badly and drifts silently. This file is the actual
+# source of truth for how the app target is wired, it is readable in a diff,
+# and it makes "how is this project configured" a question with a written
+# answer.
+#
+# If XcodeGen is ever abandoned: run `xcodegen generate` one last time, commit
+# the resulting Slate.xcodeproj, delete this file, and carry on. It is a
+# build-time generator, not a runtime dependency, and nothing in the app links
+# against it.
+
+name: Slate
+
+options:
+  bundleIdPrefix: com.slate
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+# Layer 1 and Layer 2 as local packages. The app depends on both; neither
+# depends on the app, and SlateCore depends on nothing at all.
+packages:
+  SlateCore:
+    path: Packages/SlateCore
+  SlatePlatform:
+    path: Packages/SlatePlatform
+
+targets:
+  Slate:
+    type: application
+    platform: iOS
+
+    sources:
+      - path: App/Slate
+
+    dependencies:
+      - package: SlateCore
+        product: SlateCore
+      - package: SlatePlatform
+        product: SlatePlatform
+
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.slate.Slate
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: "0.1"
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_STYLE: Automatic
+
+        # Both families on purpose. iPad is the design target and the Pencil
+        # experience is the product, but Invariant 5 says nothing may assume a
+        # screen size — and restricting the device family is exactly that
+        # assumption, expressed in build settings where it is easy to forget.
+        TARGETED_DEVICE_FAMILY: "1,2"
+
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIStatusBarHidden: NO
+
+        # All four orientations. A canvas has no preferred way up.
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: >-
+          UIInterfaceOrientationPortrait
+          UIInterfaceOrientationPortraitUpsideDown
+          UIInterfaceOrientationLandscapeLeft
+          UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: >-
+          UIInterfaceOrientationPortrait
+          UIInterfaceOrientationLandscapeLeft
+          UIInterfaceOrientationLandscapeRight
