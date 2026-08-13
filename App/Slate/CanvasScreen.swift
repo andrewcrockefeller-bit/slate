@@ -21,7 +21,14 @@ struct CanvasScreen: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        // Status line top-left, not bottom-left.
+        //
+        // PKToolPicker docks along the bottom edge on iPad and sits above the
+        // app's own content, so anything placed bottom-leading is hidden behind
+        // the palette exactly when the canvas is in use. Found by running it,
+        // not by reading it — the layout is correct in isolation and wrong in
+        // the only configuration that ships.
+        ZStack(alignment: .topLeading) {
             InkCanvasView(controller: controller)
                 .ignoresSafeArea()
 

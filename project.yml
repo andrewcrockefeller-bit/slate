@@ -18,7 +18,13 @@
 name: Slate
 
 options:
-  bundleIdPrefix: com.slate
+  # Reverse-DNS on a name we control. The obvious `com.slate` is already
+  # registered to somebody else's team — bundle identifiers are globally unique
+  # across all of Apple's developer accounts, not per-account — and Xcode
+  # reports that as "cannot be registered to your development team because it
+  # is not available", which reads like a permissions problem and is a
+  # namespace collision.
+  bundleIdPrefix: com.andrewrock
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -59,11 +65,25 @@ targets:
 
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.slate.Slate
+        PRODUCT_BUNDLE_IDENTIFIER: com.andrewrock.slate
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: "0.1"
         SWIFT_VERSION: "6.0"
         CODE_SIGN_STYLE: Automatic
+
+        # The signing team, pinned here rather than left to Xcode.
+        #
+        # Selecting a team in Xcode writes DEVELOPMENT_TEAM into the generated
+        # project — which the next `xcodegen generate` throws away, silently
+        # resetting Team to None and breaking the build with an error about
+        # provisioning that looks nothing like "your generator overwrote this".
+        # Anything Xcode's UI can set on a generated project has to live in the
+        # spec or it does not survive.
+        #
+        # This is a free Personal Team identifier, not a secret: it appears in
+        # every build of the app and identifies the developer account, nothing
+        # more.
+        DEVELOPMENT_TEAM: 9F9H7CXAN7
 
         # Both families on purpose. iPad is the design target and the Pencil
         # experience is the product, but Invariant 5 says nothing may assume a

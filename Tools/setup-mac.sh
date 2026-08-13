@@ -212,14 +212,19 @@ echo "      Then Cmd-R again."
 echo
 bold "What you should see on the iPad:"
 echo
-echo "      a near-white canvas, and bottom-left in small monospaced text:"
+echo "      A white canvas, Apple's floating tool picker, and undo/redo/clear"
+echo "      top-right. Draw one stroke with the Pencil; bottom-left should read"
+echo "      something like:"
 echo
-echo "          SLATE  M0  stall 4.0s  cooldown 20.0s  config ok"
+echo "          SLATE  M1  1 strokes · last: 47 pts, 0.82s, pressure, tilt"
 echo
-echo "  Those numbers are read out of SlateCore. If they render, Layer 1 is"
-echo "  linked and reachable from Layer 3, which is the whole on-device"
-echo "  acceptance criterion for this milestone. Drawing does nothing yet —"
-echo "  correct for M0. Ink is M1."
+echo "  That line is read out of the domain model, not out of PencilKit, so it"
+echo "  is the cheapest proof that capture worked end to end."
+echo
+echo "  Do NOT test in the Simulator: the canvas is .pencilOnly, so a mouse"
+echo "  scrolls rather than draws and it will look broken while working."
+echo
+echo "  The milestone is decided by feel, not by that line. See M1-test-plan.txt."
 echo
 dim "Re-run this script any time. After adding a source file, re-run it (or"
 dim "'$XCODEGEN generate') so the project picks the file up."

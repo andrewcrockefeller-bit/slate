@@ -1,8 +1,13 @@
 import XCTest
 import PencilKit
-import UIKit
 import SlateCore
 @testable import SlatePlatform
+
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 final class PencilKitInkConverterTests: XCTestCase {
 
@@ -14,7 +19,7 @@ final class PencilKitInkConverterTests: XCTestCase {
         forces: [CGFloat]? = nil,
         transform: CGAffineTransform = .identity,
         inkType: PKInk.InkType = .pen,
-        color: UIColor = .black
+        color: PlatformColor = .black
     ) -> PKStroke {
         let f = forces ?? Array(repeating: CGFloat(1), count: locations.count)
         let controlPoints = zip(locations, f).enumerated().map { index, pair in

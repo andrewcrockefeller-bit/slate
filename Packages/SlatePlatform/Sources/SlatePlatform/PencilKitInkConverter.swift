@@ -1,7 +1,23 @@
 import Foundation
 import PencilKit
-import UIKit
 import SlateCore
+
+#if canImport(UIKit)
+import UIKit
+/// The host platform's colour type.
+///
+/// PencilKit's model types — `PKStroke`, `PKInk`, `PKDrawing`, `PKStrokePath` —
+/// exist on macOS as well as iOS, but `PKInk.color` is `UIColor` on iOS and
+/// `NSColor` on macOS. Aliasing lets one converter serve both, which matters
+/// for a reason beyond the eventual Mac port: `swift test` on a Mac builds this
+/// package **for macOS**, so a UIKit-only adapter cannot be tested without
+/// going through xcodebuild and an iOS destination. Keeping the fast test loop
+/// is worth two conditional branches.
+public typealias PlatformColor = UIColor
+#elseif canImport(AppKit)
+import AppKit
+public typealias PlatformColor = NSColor
+#endif
 
 /// Translates between PencilKit's stroke representation and the domain's.
 ///
@@ -213,7 +229,7 @@ public struct PencilKitInkConverter: Sendable {
             type = .marker
         }
 
-        return PKInk(type, color: uiColor(from: style.color))
+        return PKInk(type, color: platformColor(from: style.color))
     }
 
     // MARK: - Primitives
@@ -234,9 +250,10 @@ public struct PencilKitInkConverter: Sendable {
         )
     }
 
-    private func inkColor(from color: UIColor) -> InkColor {
+    private func inkColor(from color: PlatformColor) -> InkColor {
         var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
 
+        #if canImport(UIKit)
         // Returns false for colours not expressible in RGBA — pattern colours,
         // and some system colours before resolution against a trait collection.
         // Opaque black is a visible, obviously-wrong fallback rather than a
@@ -244,6 +261,13 @@ public struct PencilKitInkConverter: Sendable {
         guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
             return .black
         }
+        #elseif canImport(AppKit)
+        // NSColor's getRed does not report failure — it traps if the receiver
+        // is not in an RGB colour space. Converting first is mandatory, not
+        // defensive.
+        guard let rgb = color.usingColorSpace(.sRGB) else { return .black }
+        rgb.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        #endif
 
         return InkColor(
             red: Double(red),
@@ -253,12 +277,23 @@ public struct PencilKitInkConverter: Sendable {
         )
     }
 
-    private func uiColor(from color: InkColor) -> UIColor {
-        UIColor(
+    private func platformColor(from color: InkColor) -> PlatformColor {
+        #if canImport(UIKit)
+        return UIColor(
             red: CGFloat(color.red),
             green: CGFloat(color.green),
             blue: CGFloat(color.blue),
             alpha: CGFloat(color.alpha)
         )
+        #elseif canImport(AppKit)
+        // srgbRed rather than the deviceRGB initializer, so that a colour
+        // round-trips through the same colour space it was read in.
+        return NSColor(
+            srgbRed: CGFloat(color.red),
+            green: CGFloat(color.green),
+            blue: CGFloat(color.blue),
+            alpha: CGFloat(color.alpha)
+        )
+        #endif
     }
 }

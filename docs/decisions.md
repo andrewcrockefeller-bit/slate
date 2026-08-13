@@ -315,3 +315,34 @@ would stop compiling on a future SDK. More importantly, pinning the domain's
 vocabulary to Apple's would break Invariant 5 the moment a platform with no
 "watercolor" had to open the document. An unrecognised mark renders as a pen
 mark, which is the correct failure.
+
+---
+
+## 2026-08-13 — Layer 2 compiles for macOS, via conditional colour types
+
+**Context.** The first build of the PencilKit adapter failed with
+`no such module 'UIKit'`. The cause is not obvious and is worth writing down:
+`swift test --package-path Packages/SlatePlatform` on a Mac builds the package
+**for macOS**, and UIKit does not exist there. There is no way to make
+`swift test` target iOS; that requires xcodebuild and a simulator destination.
+
+**What is actually available where.** PencilKit's *model* types — `PKStroke`,
+`PKInk`, `PKDrawing`, `PKStrokePath`, `PKStrokePoint` — are macOS 11+. Only
+`PKCanvasView` is iOS-only, and that lives in Layer 3. The single genuinely
+platform-divided thing in the adapter is colour: `PKInk.color` is `UIColor` on
+iOS and `NSColor` on macOS. Apple's documentation lists two `color` properties
+for this reason, which read as a documentation quirk until you hit it.
+
+**Options.** (a) Drop SlatePlatform from the test script and test it only
+through Xcode against an iOS destination. (b) Conditionally alias the colour
+type so the adapter compiles for both.
+
+**Chose (b).** (a) would have cost the fast `swift test` loop for the entire
+platform layer, which is where the fiddly conversion logic lives and therefore
+where a fast loop is worth the most. (b) costs two `#if canImport` branches and
+buys a Layer 2 that already compiles for platform number two on the roadmap.
+
+**One asymmetry worth knowing.** `UIColor.getRed` returns false for colours it
+cannot express; `NSColor.getRed` returns nothing and *traps* if the receiver is
+not in an RGB colour space. The macOS branch converts with
+`usingColorSpace(.sRGB)` first — that call is mandatory, not defensive.

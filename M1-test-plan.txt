@@ -1,0 +1,207 @@
+=============================================================================
+HOW TO TEST SLATE — M1 (ink capture)
+=============================================================================
+
+There are three levels, and they answer different questions. Do them in order;
+each one is cheap and rules out a whole class of problem before the next.
+
+  LEVEL 1   Automated tests        Is the logic correct?          ~1 minute
+  LEVEL 2   Run on the iPad        Does it work end to end?       ~5 minutes
+  LEVEL 3   The feel checklist     Is it good?                    ~10 minutes
+
+Level 3 is the one that decides whether M1 passes. Levels 1 and 2 can be green
+while the product is bad.
+
+
+-----------------------------------------------------------------------------
+LEVEL 1 — AUTOMATED TESTS
+-----------------------------------------------------------------------------
+
+One command. It also regenerates the Xcode project, which you need anyway
+because M1 added three new app source files.
+
+      cd ~/Claude\ Code/slate
+      ./Tools/setup-mac.sh
+
+WHAT IT RUNS
+  - the layer-purity guard (Invariant 1)
+  - swift test on SlateCore   — ~45 tests, the portable domain logic
+  - swift test on SlatePlatform — ~14 tests, the PencilKit adapter
+  - xcodegen generate
+
+WHAT PASSING MEANS
+  The stroke model is correct: bounds, transforms, arc length, capability
+  inference, colour handling, and — the important one — that a stroke converted
+  to PencilKit and back is identical. That round-trip test is the actual proof
+  of Invariant 2. If the domain model could not rebuild a drawing, PKDrawing
+  would secretly be the source of truth no matter what the architecture diagram
+  says.
+
+WHAT PASSING DOES NOT MEAN
+  Nothing here touches a Pencil. Every test feeds synthetic points to the
+  converter. Whether real hardware produces the values these tests assume is
+  Level 2's job.
+
+TO RUN JUST THE TESTS, WITHOUT REGENERATING
+      swift test --package-path Packages/SlateCore
+      swift test --package-path Packages/SlatePlatform
+
+TO RUN ONE SUITE
+      swift test --package-path Packages/SlateCore --filter InkStrokeTests
+
+
+-----------------------------------------------------------------------------
+LEVEL 2 — RUN IT ON THE IPAD
+-----------------------------------------------------------------------------
+
+FIRST, A TRAP WORTH KNOWING ABOUT
+  Do not test this in the Simulator. The canvas is set to `.pencilOnly`, which
+  means finger and mouse input scrolls rather than draws — so in the Simulator
+  you will click, nothing will happen, and it will look broken when it is
+  working exactly as designed. Palm rejection is the reason for that setting and
+  it is not worth weakening to make the Simulator usable. Use the iPad.
+
+STEPS
+  2.1  open Slate.xcodeproj
+
+  2.2  Select the blue Slate project icon > TARGETS > Slate >
+       Signing & Capabilities.
+       Set Team to your Apple ID. If the dropdown is empty:
+           Xcode > Settings > Accounts > + > Apple ID
+       A free account is fine. It signs builds that run on your own device for
+       seven days, after which you re-run from Xcode.
+
+  2.3  Plug in the iPad. Unlock it. If prompted on the iPad, tap Trust.
+       Enable Developer Mode if you have not already:
+           Settings > Privacy & Security > Developer Mode > on
+       The iPad restarts.
+
+  2.4  Pick the iPad in the destination menu at the top of the Xcode window
+       (not a Simulator). Press Cmd-R.
+
+  2.5  The first run stops with a signing error. This is normal and is not a
+       code problem. On the iPad:
+           Settings > General > VPN & Device Management > your Apple ID > Trust
+       Then Cmd-R again.
+
+WHAT YOU SHOULD SEE
+  A white canvas. A floating tool picker (Apple's own palette — pen, pencil,
+  marker, eraser, colours). Three buttons top-right: undo, redo, clear. A small
+  monospaced status line bottom-left reading:
+
+      SLATE  M1  nothing captured yet  config ok
+
+  Draw one stroke with the Pencil. On pen-up the status line becomes something
+  like:
+
+      SLATE  M1  1 strokes · last: 47 pts, 0.82s, pressure, tilt  config ok
+
+  That line is read out of the domain model, not out of PencilKit. It is the
+  cheapest possible proof that capture worked end to end.
+
+
+-----------------------------------------------------------------------------
+LEVEL 3 — THE CHECKLIST THAT ACTUALLY DECIDES M1
+-----------------------------------------------------------------------------
+
+Work through these with the Pencil in your hand. The acceptance criterion for
+this milestone is feel, and your hand is the instrument.
+
+  A. INK FEEL — the one that outranks everything
+     [ ] Write a line of algebra at normal speed. Does the ink keep up with the
+         pencil tip, or does it trail?
+     [ ] Open Apple Freeform on the same iPad, write the same line, come back.
+         Can you tell them apart by feel?
+     [ ] Write continuously for 30 seconds — a full worked problem, 40+ strokes.
+         Does it stay as responsive as the first stroke?
+
+     If any of these is a no, STOP and tell me before anything else. Ingestion
+     happens on pen-up and converts only the new stroke specifically so that
+     writing never pays for the whole document — but that is my reasoning, not a
+     measurement, and reasoning is not evidence.
+
+  B. PALM REJECTION
+     [ ] Rest your palm on the screen and write normally. Does the palm leave
+         marks? (It should not.)
+     [ ] Does resting your palm cause the canvas to scroll out from under you?
+         (It should not.)
+
+  C. PRESSURE AND TILT — is the data real?
+     [ ] Draw a stroke pressing hard, then light. Status line should say
+         "pressure".
+     [ ] Draw a stroke at a shallow angle, shading with the side of the tip.
+         Status line should say "tilt".
+     [ ] Turn the tool picker to the pencil tool and shade. Does the mark get
+         darker with pressure?
+
+     If it always says "no pressure", the force normalization is wrong. That is
+     a known guess — Apple does not document the range of PKStrokePoint.force —
+     and the dial is `maximumForce` in PencilKitInkConverter.Calibration. Tell
+     me what you see rather than changing it; I want to know the real range.
+
+  D. NAVIGATION
+     [ ] Two-finger drag pans the canvas.
+     [ ] Pinch zooms, between roughly 1/4 and 4x.
+     [ ] Zoom in, write, zoom out. Is the stroke where you put it, at the right
+         size?
+     [ ] Scroll a long way in one direction. You should not hit an edge quickly.
+         (The canvas is 20,000 x 20,000 points — very large but finite. True
+         infinite scrolling is deliberately not in M1.)
+
+  E. EDITING
+     [ ] Undo removes the last stroke. Status line's count drops.
+     [ ] Redo puts it back. Count goes up.
+     [ ] Erase a stroke with the tool picker's eraser. Count drops.
+     [ ] Clear empties the canvas and the status line says "cleared".
+
+     Undo, erase, and clear all take a slower path than drawing does, because
+     PencilKit reports that the drawing changed but never what changed — there
+     is no erase callback at all. A brief hitch when erasing on a very full
+     canvas is expected; a hitch while WRITING is not.
+
+  F. ORIENTATION AND SIZE
+     [ ] Rotate the iPad. Does the canvas survive, with strokes in place?
+     [ ] Does the status line stay readable and bottom-left?
+
+
+-----------------------------------------------------------------------------
+WHAT FAILURE LOOKS LIKE, AND WHAT IT MEANS
+-----------------------------------------------------------------------------
+
+  Build error mentioning PKStrokePath, Sequence, or Element
+      The one API I could not verify. Apple's docs describe PKStrokePath's
+      collection conformance only in the abstract, and the capture path assumes
+      iterating it yields PKStrokePoint control points. If this is what breaks,
+      it is the single most load-bearing assumption in M1. Send me the error.
+
+  App launches, drawing does nothing
+      Almost certainly the Simulator. Use the iPad.
+
+  Status line never updates
+      Capture is not reaching the domain model. The rendering would still look
+      fine, which is exactly why the status line exists.
+
+  Status line says "no pressure" for every Pencil stroke
+      Force normalization, item C above.
+
+  Strokes render in the wrong place after zooming
+      Coordinate scaling between PencilKit points and canvas units. Tell me the
+      zoom level you were at.
+
+  Anything at all feels laggy while writing
+      The most important failure mode in this product. Report it before you
+      report anything else.
+
+
+-----------------------------------------------------------------------------
+WHAT TO SEND ME BACK
+-----------------------------------------------------------------------------
+
+  [ ] Did setup-mac.sh pass, and how many tests ran?
+  [ ] Does it run on the iPad?
+  [ ] What does the status line say after one Pencil stroke — verbatim?
+  [ ] Does it feel like Freeform? Yes or no, and if no, in what way?
+
+That last question is the milestone.
+
+=============================================================================
