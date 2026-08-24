@@ -1,0 +1,609 @@
+=============================================================================
+v1.5 ADDENDUM — TEXT-BASED WORK
+Reading, literature analysis, document analysis, writing, and mechanics
+Drafted 2026-08-13. Status: DRAFT FOR REVIEW.
+Companion to: brief/founding-brief.txt (v1), brief/origin-context.txt
+=============================================================================
+
+DECISIONS TAKEN AS INPUT
+------------------------
+  - v1.5 user is the SAME student, other classes. The engineering student who
+    used v1 for calculus now uses it for their composition paper and their
+    history reading. This is the "one canvas for all my homework" play, not an
+    expansion into a humanities audience.
+  - Handwriting is for thinking; typed text is for prose. Outlining,
+    annotation, and argument-mapping stay on the canvas because they are
+    genuinely better by hand. Paragraph drafting happens in a typed surface,
+    because nobody writes a five-page paper with a Pencil.
+
+
+=============================================================================
+0. READ THIS SECTION EVEN IF YOU READ NOTHING ELSE
+=============================================================================
+
+Planning v1.5 now changes what v1 must build. Six model decisions have to be
+made correctly in M2 and M3 or v1.5 becomes a data migration against real user
+data — the exact failure Invariant 4 exists to prevent. They are listed in
+section 8 and mirrored into the v1 brief as section 10.
+
+The expensive one, stated here because it is the easiest to skip: **when v1
+imports a PDF or photo, it must extract and store the text alongside the
+backdrop image, even though v1 never reads it.** v1 uses the image. v1.5 needs
+the text. Extraction at import time is nearly free. Backfilling it across every
+document a user has already created is a background migration job you will
+write at the worst possible moment.
+
+
+=============================================================================
+1. THE THROUGH-LINE
+=============================================================================
+
+This is not a second product bolted on. It is the same loop pointed at a
+different subject:
+
+    v1    notices the moment your ALGEBRA bends
+    v1.5  notices the moment your ARGUMENT bends
+
+In both cases the tutor is watching partial work, identifying the *class* of
+error, and emitting the smallest sufficient nudge. A paragraph whose topic
+sentence and closing sentence make different claims is structurally the same
+failure as cancelling terms instead of factors: the student has done something
+locally plausible that breaks the thing globally, and cannot see it because
+they are inside it.
+
+The test for any v1.5 feature is unchanged from v1: **does removing it break
+that loop?** Features that only make sense as a review pass on finished work
+are out. We are not building a proofreader.
+
+  OPINION — THE PART OF YOUR REQUEST I WANT TO PUSH BACK ON. You listed grammar
+  analysis alongside literature and document analysis. It is by a wide margin
+  the least valuable item on that list and the only one that is off-thesis.
+  Grammar checking is a commodity — Grammarly, Apple's built-in proofreading,
+  and every word processor already do it, for free, better, and inline. Building
+  it wins us nothing and costs us the "not a proofreader" positioning that keeps
+  this app defensible with teachers.
+
+  I have kept it, but narrowly and deliberately reframed: no inline squiggles,
+  no corrections offered mid-draft. Mechanics are surfaced only as *patterns* in
+  the session summary — "you wrote four comma splices today, all of them joining
+  a claim to its evidence; here's what that structure usually wants instead."
+  That is something no proofreader does, it is on-thesis, and it costs almost
+  nothing once the session summary exists. Section 6 has the detail. If you want
+  real inline grammar checking, say so and I'll scope it, but I think it makes
+  the product worse.
+
+
+=============================================================================
+2. WHAT v1.5 SHIPS
+=============================================================================
+
+Three surfaces, each with the tutor loop attached.
+
+  A. THE READING SURFACE — literature and document analysis
+  B. THE PLANNING SURFACE — outlining and argument mapping, by hand
+  C. THE DRAFTING SURFACE — typed prose with a structural tutor
+
+They are not three modes. A single document holds all three: the source text
+on the left of the canvas, the student's handwritten annotation and outline in
+the middle, the typed draft in a pane. The tutor sees all of it at once, which
+is the whole advantage over three separate apps.
+
+
+-----------------------------------------------------------------------------
+2A. THE READING SURFACE
+-----------------------------------------------------------------------------
+
+WHAT IT DOES
+  - Imports a source text: PDF, EPUB, DOCX, plain text, a pasted article, or a
+    photographed book page. Text is extracted, not just rendered.
+  - Displays it as a readable pane on the canvas, reflowable, with the
+    handwriting canvas alive around and over it.
+  - The student annotates by hand: underlines, margin notes, brackets, arrows,
+    question marks. All captured as normalized strokes anchored to text spans,
+    not to screen coordinates.
+  - Reading passages become work regions with state, exactly as math problems
+    do in v1.
+
+WHAT THE TUTOR DOES
+  - Watches annotation as it happens. A margin note that misreads a passage is
+    the reading equivalent of a wrong algebraic step, and it is catchable the
+    same way.
+  - Asks Socratic questions anchored to the passage the student is on, at the
+    moment they slow down or stop.
+  - Surfaces structure the student hasn't marked: an unmarked shift in
+    narrator reliability, an unmarked counterargument, a claim the author makes
+    without support.
+  - Tracks a passage-level map of what the student has and hasn't engaged with,
+    which is the input to the reading session summary.
+
+WHAT IT DOES NOT DO
+  - Does not summarize the text. Ever. A summary is the answer to a reading
+    assignment in the same way a solved equation is the answer to a math
+    problem. This is the R6 line in section 4 and it is the single highest
+    cheating-risk surface in the product.
+  - Does not answer comprehension questions.
+  - Does not tell the student what a passage means. It asks what they think it
+    means and then presses on the weak part of that.
+
+  OPINION — ANCHOR ANNOTATIONS TO TEXT SPANS, NOT COORDINATES. This is the
+  non-obvious engineering decision in the reading surface and it needs to be
+  right the first time. If a handwritten underline is stored at canvas
+  coordinates, it breaks the moment the text reflows — different font size,
+  different device, rotation. Annotations must be anchored to a character range
+  in the extracted text, with the canvas position derived at render time. That
+  makes the anchor a pure-Swift value type (document ID + character range +
+  stroke geometry relative to the span), which lives in Layer 1 and tests on
+  Linux. It also means an annotation survives being viewed on a phone, which
+  Invariant 5 requires and coordinate anchoring makes impossible.
+
+
+-----------------------------------------------------------------------------
+2B. THE PLANNING SURFACE
+-----------------------------------------------------------------------------
+
+This is the part that most justifies the app existing, and the part no
+competitor does. Students plan essays badly because planning is invisible work
+with no feedback until the paper comes back graded.
+
+WHAT IT DOES
+  - Handwritten outlining on the infinite canvas: bullets, indentation, arrows
+    between ideas, boxes, crossing things out and moving them.
+  - Argument mapping: the student marks claims, evidence, and the link between
+    them. Lightweight — a gesture or a region kind, not a formal notation the
+    student has to learn.
+  - A thesis region, marked once, that everything else is evaluated against.
+
+WHAT THE TUTOR DOES
+  - Watches the outline take shape and flags structural problems while they are
+    still cheap to fix:
+        - a body section with no evident connection to the thesis
+        - two sections making the same claim in different words
+        - a claim with no evidence attached
+        - evidence attached to no claim
+        - an ordering where section 3 depends on something not established
+          until section 5
+        - a thesis that is a topic, not an argument (the most common failure
+          in student writing, and trivially detectable)
+  - Asks what the counterargument is, if the student hasn't marked one.
+  - Never proposes the outline. Never fills in a missing section.
+
+  OPINION: "your thesis is a topic, not a claim" is the single highest-value
+  intervention in the entire writing side of this product, it fires on nearly
+  every first draft, and it is detectable from about fifteen words of student
+  handwriting. If v1.5 shipped with only that one behavior it would still be
+  worth shipping.
+
+
+-----------------------------------------------------------------------------
+2C. THE DRAFTING SURFACE
+-----------------------------------------------------------------------------
+
+WHAT IT DOES
+  - A typed text pane, first-class on the canvas, positioned beside the outline
+    so the student can see their plan while drafting.
+  - Hardware keyboard and on-screen keyboard. Standard text editing.
+  - Sections of the draft are linked to outline nodes, so the tutor knows which
+    part of the plan a given paragraph is supposed to be executing.
+  - Live word count against a target, because assignments have one.
+
+WHAT THE TUTOR DOES
+  - Structural and argumentative feedback only, at paragraph granularity or
+    coarser:
+        - paragraph drifts from its own topic sentence
+        - claim asserted without the evidence the outline promised
+        - a transition that asserts a logical relationship the content does not
+          support ("therefore" between two unrelated observations)
+        - evidence quoted but never interpreted — the most common undergraduate
+          failure after the topic-thesis problem
+        - a paragraph that has drifted off the outline node it is linked to
+        - the draft has stopped tracking the thesis
+  - Fires on paragraph completion and on stall, not on keystroke. Nothing about
+    this should feel like a spell checker.
+
+WHAT IT DOES NOT DO — see R6, section 4
+  - Does not write, rewrite, or complete sentences beyond a single
+    demonstration sentence at hint Level 4.
+  - Does not generate a thesis, a topic sentence, a transition, or a
+    conclusion.
+  - Has no autocomplete, no "continue writing", no suggested phrasing.
+
+
+=============================================================================
+3. THE WRITING HINT LADDER
+=============================================================================
+
+The v1 ladder is math-shaped. It generalizes, but the levels have to be
+redefined for text, not reused. Worked below against one real failure: a
+paragraph whose topic sentence claims the narrator is unreliable and whose
+closing sentence claims he is naive.
+
+  LEVEL 1 — ORIENT
+    Points at the location. Names no craft concept.
+    "Read your second paragraph's first and last sentences back to back.
+     Something moves between them."
+
+  LEVEL 2 — PRINCIPLE
+    Names the general rule, in the abstract, without touching their text.
+    "A paragraph should advance one claim. When the opening and closing
+     sentences argue different things, the reader can't tell which one the
+     evidence was supposed to support."
+
+  LEVEL 3 — APPLIED NUDGE
+    Applies it to their actual paragraph and poses the next decision. Stops
+    before making it.
+    "You open saying the narrator is unreliable and close saying he's naive —
+     those are different arguments. Which one is this paragraph making? Once
+     you pick, which of your three quotes actually supports that one?"
+
+  LEVEL 4 — ONE DEMONSTRATION
+    Rewrites exactly ONE sentence, as a demonstration of the move, and stops.
+    Never a paragraph. Never the thesis. Never the sentence the student is
+    currently writing.
+    "Here's what a single-claim version of your topic sentence looks like:
+     'The narrator's account of the dinner cannot be taken at face value.'
+     Notice it commits to one reading. Now do the closing sentence yourself."
+    Requires: explicit student request AND two prior revisions of this
+    paragraph. Never fires from a stall.
+
+DIFFERENCES FROM THE MATH LADDER, WHICH MATTER
+  - There is no "correct answer" to withhold. The failure mode is not leaking a
+    solution; it is producing prose the student can submit. That makes the
+    constraint stricter, not looser — see R6.
+  - Levels 1 and 2 can fire on things that are not errors. A paragraph can be
+    correct and still weak. The math ladder only fires on wrongness; the
+    writing ladder fires on weakness, which means false-positive tolerance is
+    lower and `confidenceFloor` should be set higher for text domains.
+  - Escalation is per-paragraph, not per-problem. A student may be at Level 3
+    on paragraph two and Level 1 on paragraph four simultaneously.
+
+THE READING LADDER
+  Reading is Socratic rather than corrective and inverts the shape: the tutor
+  asks rather than tells at every level, and the levels differ in how much of
+  the interpretive work the question does.
+    L1  "What do you make of the shift in how he describes his brother here?"
+    L2  "Compare how he describes his brother on this page with page 40. What
+         changed, and is it the brother or the narrator that changed?"
+    L3  "The description gets warmer right after the inheritance is settled.
+         What does that timing suggest about what's driving his account?"
+    L4  Names one piece of textual evidence the student has not engaged with,
+        and asks what they make of it. Never states the interpretation.
+
+
+=============================================================================
+4. R6 — THE PROSE RULE
+=============================================================================
+
+Added to the hard rules in section 3 of the v1 brief. This is stricter than
+R1/R2 and here is why, stated plainly because it will be tempting to weaken:
+
+  In math, a leaked step is a step. The student still has to assemble the rest,
+  and a teacher looking at the work can see whether the student can do it.
+
+  In writing, THE PROSE IS THE ARTIFACT. A tutor that emits a well-formed
+  paragraph has not given a hint — it has produced a submittable deliverable.
+  There is no partial-credit version of that. Every "help me phrase this"
+  request is one keystroke from plagiarism, and the request will be constant.
+
+RULES
+
+  R6.1  The tutor never emits more than `maxGeneratedProseWords` of contiguous
+        prose in the student's document voice. Default: 25. One sentence.
+  R6.2  Level 4 demonstration sentences are the ONLY generated prose permitted,
+        are capped at one per hint, and are visually and structurally marked as
+        tutor output — a distinct element type that cannot be silently pasted
+        into the draft as the student's own text.
+  R6.3  The tutor never generates a thesis statement, a topic sentence for an
+        unwritten paragraph, a transition, an introduction, or a conclusion,
+        at any level, under any request. These are the load-bearing sentences;
+        writing them IS writing the paper.
+  R6.4  The tutor never summarizes an assigned source text, and never answers a
+        comprehension question about it.
+  R6.5  No autocomplete, no continuation, no "improve this" rewrite of student
+        prose. If the student asks for a rewrite, the response is a Level 2 or
+        3 hint about what is weak, not a rewrite.
+  R6.6  Copying tutor-generated prose into the draft is a tracked event. It
+        does not block, but it appears in the session summary and, if a teacher
+        integration ever exists, it is the thing that makes this app trustable.
+
+  R6 is enforced by a Layer 1 validator on parsed responses, the same mechanism
+  as R1/R2, with a text-domain rule set. `enforceNoProse` is a feature flag that
+  ships true and never ships false.
+
+  OPINION: R6.2's "distinct element type" is worth the extra work. A
+  demonstration sentence that lives as a tutor-owned canvas object rather than
+  as selectable text in the draft makes the lazy path — select, copy, paste —
+  meaningfully harder than the intended path. Not impossible. Harder. That
+  asymmetry is most of what product-level integrity enforcement can actually
+  achieve, and it is worth more than any detection system.
+
+
+=============================================================================
+5. TRIGGER EVENTS FOR TEXT WORK
+=============================================================================
+
+The v1 triggers assume the student is producing strokes in a bounded region.
+Reading produces almost no strokes, and typing produces a continuous stream.
+Both need their own trigger sets. T1's stall semantics in particular do NOT
+carry over: a student who has stopped writing while reading is *reading*, which
+is the desired behavior, not a stall.
+
+READING TRIGGERS
+  RT1  PASSAGE DWELL — reading position stationary on one passage beyond
+       `passageDwellThreshold`, with no annotation. Distinguished from normal
+       reading by the absence of scroll progress.
+  RT2  REGRESSION — student scrolls back to a passage already read.
+       The strongest confusion signal available in reading, and the analog of
+       v1's erase burst. Highest-value reading trigger.
+  RT3  ANNOTATION EVENT — student marks, underlines, or writes a margin note.
+       Evaluate the note against the passage.
+  RT4  QUESTION MARK — student writes "?" in a margin. Explicit ask. Never
+       suppressed.
+  RT5  PASSAGE COMPLETE — student moves past a passage marked as required.
+       Evaluation, not a hint: records engagement for the summary.
+
+WRITING TRIGGERS
+  WT1  PARAGRAPH COMPLETE — a paragraph break followed by
+       `paragraphSettleDelay` of no typing. The primary writing trigger.
+  WT2  TYPING STALL — no keystroke for `typingStallThreshold` mid-paragraph.
+       Signals stuck, not finished. Longer than v1's stall; composition pauses
+       are normal and interrupting them is worse than being late.
+  WT3  DELETION BURST — more than `deletionBurstFraction` of recent characters
+       deleted. The typed analog of the erase burst.
+  WT4  OUTLINE DIVERGENCE — a drafted section's content stops matching the
+       outline node it is linked to. Fires at most once per section.
+  WT5  EXPLICIT ASK — the hint affordance, or "?" written on the canvas.
+
+SUPPRESSION
+  All v1 suppression rules carry over. Two additions:
+  - Never fire WT1 or WT2 while the student is mid-sentence by punctuation, not
+    just mid-keystroke. Interrupting a sentence in progress is the single most
+    destructive thing this product can do to a writer.
+  - Reading triggers are capped much lower than math triggers.
+    `maxHintsPerPassage` defaults to 3. Reading tolerates interruption far
+    worse than problem-solving does.
+
+
+=============================================================================
+6. MECHANICS AND GRAMMAR — DELIBERATELY NARROW
+=============================================================================
+
+Not inline. Not corrective. Not while drafting.
+
+WHAT SHIPS
+  - Mechanics errors are detected and recorded silently during the session,
+    never surfaced in the moment.
+  - The session summary reports them as PATTERNS with structural context, not
+    as a list of corrections:
+      "Six comma splices today. Five of them joined a claim to the evidence for
+       it — that's usually a signal you want a colon or a subordinating
+       conjunction, because the second clause is explaining the first rather
+       than adding to it."
+      "You used passive voice in every sentence where you attributed a claim to
+       a source. Worth checking whether that's hedging."
+  - Repeated patterns across sessions become a tracked profile, once
+    cross-session modeling exists.
+
+WHY THIS SHAPE
+  - Inline grammar checking is a commodity the student already has, and it
+    trains them to fix symptoms without seeing the pattern.
+  - Pattern-level reporting is genuinely differentiated, is on-thesis, and is
+    nearly free once the session summary infrastructure from v1's M8 exists.
+  - It keeps the product out of the "AI writing assistant" category, which is
+    the category that gets banned.
+
+WHAT DOES NOT SHIP
+  - Squiggly underlines, inline corrections, one-tap fixes, style scoring,
+    readability grades. All of it is off-thesis and all of it dilutes the
+    positioning.
+
+
+=============================================================================
+7. DOCUMENT INGESTION ARCHITECTURE
+=============================================================================
+
+This is the genuinely new technical problem in v1.5 and it is mostly a
+Layer 1 problem, which is good news for the invariants.
+
+THE PROBLEM
+  A math problem region rasterizes to one image that fits in one request. A
+  novel does not. A 300-page assigned text cannot be sent to a provider on
+  every trigger, and the student's key would not survive it if it could.
+
+THE SHAPE
+  Layer 2 does extraction and I/O only:
+    `TextExtracting`      PDF / EPUB / DOCX / OCR → plain text + structure
+    `DocumentImporting`   file access, format sniffing
+  Layer 1 does everything else, in pure Swift, tested on Linux:
+    - Structural parsing: chapters, sections, paragraphs, character offsets
+    - Chunking into retrievable units with stable IDs
+    - Relevance selection: given the student's current passage, annotations,
+      thesis, and draft, choose which chunks go into the evaluation context
+    - Context budgeting: pack the selected chunks under a configured token
+      ceiling, with documented priority ordering
+
+  OPINION — RETRIEVAL SELECTION BELONGS IN LAYER 1 AND THIS IS A WIN, NOT A
+  BURDEN. It is the part most likely to be tuned repeatedly, it is pure
+  deterministic logic over text, and having it Linux-testable means you can
+  iterate on retrieval quality with fast unit tests instead of by hand on a
+  device. Do not let it drift into Layer 2 because "the embedding model lives
+  there." If semantic embedding is used at all, the embedding *call* is a Layer
+  1 protocol with a Layer 2 adapter, exactly like AIProvider; the *selection
+  logic* over returned vectors stays in Layer 1.
+
+  Start with lexical and structural retrieval — the student's current passage
+  plus neighbors, plus chunks containing terms from their annotations and
+  thesis. Add embeddings only if that measurably fails. It probably won't for
+  a single assigned text, and it adds a dependency, a cost, and a storage
+  format we would have to version.
+
+EVALUATION CONTEXT FOR TEXT DOMAINS
+  - Reading: current passage text + neighbors + the student's annotations on
+    them, anchored by character range + prior hints + passage state.
+  - Writing: thesis + outline structure + the paragraph in question + adjacent
+    paragraphs + the outline node this paragraph is linked to + prior hints.
+  - Handwritten annotation is sent both as rasterized ink (it is handwriting;
+    the v1 image path already works) and as its text-span anchor, so the model
+    knows exactly what the note is attached to.
+
+
+=============================================================================
+8. WHAT v1 MUST CHANGE NOW
+=============================================================================
+
+Six changes to the v1 milestone plan. All are cheap now and expensive later.
+None of them add a v1 feature; they only prevent a v1.5 migration.
+
+  C1. CANVAS ELEMENTS ARE POLYMORPHIC FROM M2.
+      The document model is a collection of `CanvasElement`, not a collection
+      of strokes. Kinds in v1: `.strokeGroup`, `.image`, `.hint`. Kinds added
+      in v1.5: `.textBlock`, `.sourceDocument`, `.outlineNode`. Every element
+      carries UUID + lastModified + owner regardless of kind.
+      Cost now: an enum and a protocol. Cost later: migrating every document
+      every user has made.
+
+  C2. `ProblemRegion` IS NAMED `WorkRegion` AND CARRIES A `kind` FROM M3.
+      v1 ships one kind, `.mathProblem`. v1.5 adds `.readingPassage`,
+      `.outlineSection`, `.draftSection`. Region state
+      (untouched / in-progress / solved / set-aside) generalizes cleanly;
+      "solved" becomes "complete".
+      Cost now: a better name and one enum. Cost later: a rename across the
+      codebase plus a schema migration.
+
+  C3. THE LADDER IS A PROTOCOL, NOT HARDCODED LOGIC, FROM M6.
+      `HintLadder` declares the four levels, escalation rules, and validation
+      hooks. `MathLadder` conforms in v1. `WritingLadder` and `ReadingLadder`
+      conform in v1.5 without touching the tutor state machine. Per Invariant 3
+      this is what the seam is supposed to look like.
+
+  C4. `EvaluationContext` IS COMPOSABLE FROM M5.
+      Not "an image plus metadata." A structure that can carry
+      `.rasterizedRegion`, and later `.textSpan`, `.documentChunks`,
+      `.outlineGraph`, without the pipeline in section 5 of the v1 brief
+      changing shape.
+
+  C5. ERROR CLASSES ARE NAMESPACED BY DOMAIN FROM THE START.
+      Resolves Q4 in the v1 brief. `math.cancellation.termsNotFactors`,
+      `writing.paragraph.claimDrift`, `reading.inference.unsupported`. Flat
+      taxonomies do not survive a second domain.
+
+  C6. IMPORTED DOCUMENTS STORE EXTRACTED TEXT FROM M7.
+      v1 imports a PDF or photo as a backdrop image and never reads the text.
+      Extract and store it anyway, with character offsets and page mapping.
+      v1.5 requires it, extraction at import is nearly free, and backfilling it
+      across existing user documents is a migration job written under pressure.
+
+  Two of these — C2 and C5 — are pure naming. They cost nothing today and are
+  the ones most likely to get skipped as premature. Do them.
+
+
+=============================================================================
+9. CONFIGURATION ADDITIONS — TutorConfig
+=============================================================================
+
+Added to the v1 config object in section 7 of the founding brief.
+
+  passageDwellThreshold      45.0 s   RT1 threshold. Long — reading slowly is
+                                      not being stuck.
+  regressionSensitivity       1       Scroll-backs to a read passage before
+                                      RT2 fires.
+  maxHintsPerPassage          3       Much lower than the math cap. Reading
+                                      tolerates interruption badly.
+  paragraphSettleDelay        3.0 s   WT1 delay after a paragraph break.
+  typingStallThreshold       25.0 s   WT2. Long by design — composition pauses
+                                      are normal and healthy.
+  deletionBurstFraction       0.35    WT3 trigger.
+  deletionBurstWindow        15.0 s   Window for the above.
+  maxGeneratedProseWords     25       R6.1 hard cap on contiguous generated
+                                      prose. Do not raise this.
+  textConfidenceFloor         0.75    Higher than v1's 0.60. Writing hints fire
+                                      on weakness rather than wrongness, so a
+                                      false positive costs more.
+  contextTokenCeiling      12000      Retrieval packing budget per evaluation.
+                                      The main cost lever for text work.
+  chunkTargetTokens          400      Retrieval chunk size.
+  chunkNeighborRadius         2       Chunks either side of the current passage
+                                      always included.
+  enforceNoProse           true       R6 validator flag. Never ships false.
+  outlineDivergenceOn      true       Feature flag on WT4 — the most
+                                      speculative trigger in the set.
+
+
+=============================================================================
+10. MILESTONES M9-M14
+=============================================================================
+
+Continuing from v1's M8. Each ends runnable on a physical iPad.
+
+  M9 — TEXT AS A FIRST-CLASS ELEMENT
+    `.textBlock` canvas elements. Typed entry, hardware and on-screen keyboard,
+    selection, standard editing. Text blocks persist through the same
+    repository and ordered-operation path as strokes.
+    You should see: type a paragraph on the canvas beside your handwriting,
+    force-quit, relaunch, it's all there.
+
+  M10 — DOCUMENT INGESTION
+    `TextExtracting` and `DocumentImporting` adapters. Structural parsing,
+    chunking, and retrieval selection in Layer 1 with Linux tests. A reader
+    pane that displays an imported text.
+    You should see: import a PDF chapter, read it in a proper reflowing pane,
+    and a debug view showing which chunks retrieval would select for the
+    passage you're on.
+
+  M11 — ANNOTATION AND THE READING LOOP
+    Span-anchored handwritten annotation. Reading passages as work regions.
+    Triggers RT1-RT5. `ReadingLadder`.
+    You should see: underline a sentence and write a margin note that
+    misreads it; the tutor asks you a question about it without telling you
+    you're wrong.
+
+  M12 — PLANNING AND THE WRITING LADDER
+    Outline nodes, thesis region, claim/evidence marking, outline-to-draft
+    linking. `WritingLadder`. Triggers WT1-WT5. The R6 validator.
+    You should see: write a thesis that's a topic rather than a claim, and get
+    told so within seconds — without being told what your thesis should be.
+
+  M13 — MECHANICS PATTERNS AND THE TEXT SESSION SUMMARY
+    Silent mechanics detection. Pattern-level summary. Reading engagement map.
+    Copy-from-tutor tracking (R6.6).
+    You should see: finish a drafting session and get a summary that names a
+    habit you didn't know you had.
+
+  M14 — INTEGRATION AND SHIP
+    One document holding source text, handwritten outline, and typed draft,
+    with the tutor seeing all three. Performance pass on long documents.
+    TestFlight.
+    You should see: your whole paper — reading, planning, drafting — in one
+    canvas, with a tutor that knows your draft is drifting from the passage you
+    annotated an hour ago. That is the thing no other product does.
+
+
+=============================================================================
+11. OPEN QUESTIONS
+=============================================================================
+
+  Q6.  Cost. Text work sends far more tokens per evaluation than a rasterized
+       math region, and writing triggers fire more often than math triggers.
+       A drafting session could plausibly cost several times a math session on
+       the student's own key. Measure at M10 before tuning
+       `contextTokenCeiling` and the trigger thresholds.
+  Q7.  Does the reading loop actually work? v1's core risk was whether a model
+       reads handwriting well enough to diagnose from, and M4 answers it. The
+       equivalent v1.5 risk is whether the tutor can tell a genuinely insightful
+       margin note from a wrong one without the source's critical apparatus.
+       Unproven. M11 is the go/no-go, and it should be treated as one.
+  Q8.  Copyright and assigned texts. Sending chunks of a copyrighted textbook
+       to a provider is the student's own use of their own key, which is
+       probably fine, but "probably" is doing work there. Worth a real look
+       before M10, not after.
+  Q9.  Handwritten annotation OCR quality on marginalia. Margin notes are the
+       messiest handwriting a person produces — small, cramped, hurried. v1's
+       M4 proves handwriting reading on worked math, which is comparatively
+       neat. This may not transfer.
+  Q10. Does the "same student, other classes" bet hold? It is the premise of
+       this whole addendum. The cheapest possible test is asking three real
+       students whether they would use one app for calc homework and their
+       composition paper, before M9 rather than after M14.
+
+=============================================================================
+END OF v1.5 ADDENDUM
+=============================================================================

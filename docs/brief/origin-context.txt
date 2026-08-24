@@ -1,0 +1,188 @@
+=============================================================================
+SESSION CONTEXT — ORIGIN STORY AND PROBLEM STATEMENT
+"AI tutor watching a handwritten whiteboard" — what was built, what worked,
+and where it broke down
+=============================================================================
+
+PURPOSE OF THIS DOCUMENT
+------------------------
+Background context. It describes a working prototype of an idea — an AI that
+watches a student handwrite math on a tablet and tutors them in real time —
+assembled out of off-the-shelf parts during a single session. It documents what
+the setup was, what it proved, and the specific friction that makes a
+purpose-built application worth building.
+
+Read this as the origin story and problem statement. It is not a spec.
+
+
+-----------------------------------------------------------------------------
+1. THE SETUP THAT WAS ACTUALLY BUILT
+-----------------------------------------------------------------------------
+
+Participants:
+  - A student (University of Florida, incoming mechanical engineering) preparing
+    for the ALEKS math placement exam, which gates enrollment in Calculus 1
+    (MAC 2311) and General Chemistry 1 (CHM 2045). A 76% score clears both.
+  - An AI assistant (Claude, running in "Cowork" mode — a cloud-hosted agent
+    session with the ability to request scoped control of applications on the
+    user's Mac).
+
+Physical arrangement:
+  - Student handwrites with an Apple Pencil in Apple Freeform on an iPad.
+  - Freeform syncs the board to the student's Mac over iCloud.
+  - The AI was granted app-scoped control of Freeform on the Mac only. Every
+    other application was excluded from its view at the compositor level.
+  - The AI observed by taking periodic screenshots of the Freeform window and
+    reading the student's handwriting out of the image.
+
+What the AI did, concretely:
+  a) Researched the actual placement requirement from the university registrar
+     and catalog, and confirmed a single ALEKS exam covers both math and
+     chemistry placement.
+  b) Authored ten practice problems calibrated to the exam: five routine
+     warm-ups and five chosen because they are commonly missed by students who
+     have already taken calculus (extraneous log solutions, rational inequality
+     sign flips, sqrt(x^2) = |x| rather than x, lost solutions from dividing
+     out sin x, domain exclusions inside a radical's interval).
+  c) Created the worksheet directly inside Freeform via UI automation — inserted
+     a text box, typed all ten problems with Unicode math characters, set the
+     font to 36pt to visually match the student's handwriting size, set left
+     alignment, widened the text box so each problem fit on one line, and tuned
+     the blank-line spacing between problems so each had roughly four to six
+     lines of the student's actual handwriting height in which to work.
+  d) Created a second, separate "TIPS" text box positioned beside the worksheet,
+     and appended hints to it as the student worked.
+  e) Entered an observation loop: screenshot every 30-60 seconds, read the
+     student's handwritten scratch work, diagnose the error, and append a
+     directional hint — never the answer.
+
+A real exchange from the session, verbatim in substance:
+  - Problem: simplify (3x^2 - 12)/(x^2 + x - 6).
+  - Student's first attempt cancelled individual terms out of the numerator and
+    denominator, producing nonsense.
+  - AI's tip: "You can only cancel FACTORS, not terms. Factor the top and the
+    bottom completely first, then see what actually matches. Right now you're
+    cancelling pieces of a sum."
+  - Student erased, restarted, and produced 3(x^2 - 4)/(x^2 + x - 6), then wrote
+    "What's next now?" on the canvas.
+  - AI's next tip: "Good — numerator is right so far. x^2 - 4 is a difference of
+    squares, so factor that too. Then factor the bottom: what pair multiplies to
+    -6 and adds to +1?"
+
+Note the shape of that loop. The AI is not grading a final answer. It is reading
+partially-completed handwritten work, identifying the *class* of error, and
+emitting the smallest nudge that unblocks the next step.
+
+
+-----------------------------------------------------------------------------
+2. AN IMPORTANT BOUNDARY THAT WAS ESTABLISHED
+-----------------------------------------------------------------------------
+
+Early in the session the student asked the AI to help during the live placement
+exam. The AI declined, on two grounds:
+
+  - ALEKS explicitly requires answers based solely on the test-taker's own
+    knowledge; assisting would violate the university honor code.
+  - More practically, the exam is a diagnostic, not a gate to be beaten. An
+    inflated score places the student into Calculus 1 and General Chemistry
+    simultaneously without the algebra fluency either course assumes — a
+    materially worse outcome than placing accurately and clearing the retake.
+
+The session then pivoted to genuine preparation. This boundary is not incidental
+trivia; it is a product requirement. Any tool of this kind must be explicitly
+designed for practice and homework, must refuse to operate during proctored
+assessment, and must lead with hints rather than solutions. A product that
+positions itself as "AI that does your homework" is a cheating tool with a
+short commercial life. A product that positions itself as "AI that watches you
+work and catches you the moment you go wrong" is a tutor.
+
+
+-----------------------------------------------------------------------------
+3. WHAT THE PROTOTYPE PROVED
+-----------------------------------------------------------------------------
+
+  - Reading handwritten mathematical work from a screenshot is reliable enough
+    to tutor from. Fractions, radicals, exponents, and mid-solution scratch work
+    were all read correctly.
+  - Seeing the *steps* is qualitatively more valuable than seeing the answer.
+    The diagnostic signal is in where the reasoning bends, not in whether the
+    final value matched.
+  - A hint delivered into the same visual workspace, next to the problem, at the
+    moment of being stuck, is a different experience from typing a question into
+    a chat window. The student never had to describe their problem, transcribe
+    their work, or context-switch out of the canvas.
+  - An AI can author the worksheet, tune it to the student's handwriting size,
+    and then tutor against it — content generation and tutoring are one loop,
+    not two products.
+
+
+-----------------------------------------------------------------------------
+4. WHERE IT BROKE DOWN — THE CASE FOR A REAL APP
+-----------------------------------------------------------------------------
+
+Every one of these is an artifact of bolting an AI onto an app that has no
+concept of AI. They are the requirements list in negative form.
+
+  ARCHITECTURE
+  - No direct path to the iPad. The AI could not see the tablet the student was
+    actually writing on. It required a Mac running the same app, with iCloud
+    syncing between them, adding seconds of lag and a hard dependency on a
+    second device.
+  - Observation was screenshot polling: slow, coarse, expensive, and blind
+    between frames. The AI saw a static image every 30-60 seconds and had no
+    access to stroke data, stroke order, timing, pressure, or the fact that the
+    student had paused for ninety seconds on one line.
+
+  LATENCY AND TRIGGERING
+  - Fixed-interval polling is the wrong trigger. Real tutoring fires on
+    *events*: the student stops writing for four seconds, the student erases
+    something, the student finishes a problem, the student writes a question
+    mark. Polling either interrupts mid-thought or arrives long after the
+    student got stuck.
+
+  BRITTLENESS OF UI AUTOMATION
+  - Text boxes were inserted at the viewport center and had to be dragged into
+    position afterward.
+  - Font size, alignment, and box width all defaulted wrong and required
+    separate corrective interactions.
+  - Appending to an existing text box corrupted it, because a double-click to
+    focus selected a word and the subsequent typing partially overwrote it.
+  - Clicks failed intermittently because unrelated application windows sat
+    invisibly above the target coordinates.
+  - The application window moved between screenshots, invalidating cached
+    coordinates.
+
+  MISSING DOMAIN MODEL
+  - The canvas had no notion of "problem 7." There was no per-problem state, no
+    record of which problems were attempted, no history of hints already given,
+    no way to know whether a hint had been read, and no way to summarize the
+    session's error patterns afterward.
+  - Nothing was learned across sessions. The next session starts from zero.
+
+  MISSING INPUT PATHS
+  - No way to import a homework PDF or a photograph of a textbook page and have
+    problems laid out on the canvas automatically.
+
+The through-line: the prototype worked because the *model* is good enough, and
+struggled everywhere the *plumbing* was improvised. A native application with
+direct access to the canvas, stroke-level input, an explicit problem model, and
+an event-driven tutor loop removes essentially all of the friction above while
+keeping everything that worked.
+
+
+-----------------------------------------------------------------------------
+5. THE PRODUCT THESIS, IN ONE PARAGRAPH
+-----------------------------------------------------------------------------
+
+A handwriting-first infinite canvas — the feel and freedom of Apple Freeform,
+built for an Apple Pencil — with an AI tutor that is a native participant in the
+canvas rather than a chat window bolted to the side. The student imports or is
+given problems, works them by hand, and the tutor watches the strokes, notices
+the moment the reasoning goes wrong, and places a hint on the canvas next to the
+work. It never gives the answer first. It works with whichever frontier model
+the student brings a key for. It starts on iPad, where the Pencil experience is
+the product, and ports outward from there.
+
+=============================================================================
+END OF SESSION CONTEXT
+=============================================================================

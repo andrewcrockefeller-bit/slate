@@ -1,0 +1,482 @@
+=============================================================================
+FOUNDING BRIEF — v1
+Working title: SLATE
+Handwriting-first infinite canvas with a live AI tutor
+Drafted 2026-08-13. Status: DRAFT FOR REVIEW. Mark it up.
+=============================================================================
+
+HOW TO READ THIS
+----------------
+This is the document the project instructions refer to and did not yet contain.
+It defines four things the instructions assume exist: what v1 is and is not, the
+four-level hint ladder, the tutor loop's trigger events, and the milestone
+sequence. It does not restate the five invariants — those live in the project
+instructions and govern everything below.
+
+Where I made a call you may disagree with, the call is marked OPINION with the
+reasoning attached. Those are the parts to argue with. Everything else is
+mechanical.
+
+Companion document: brief/origin-context.txt (the prototype origin story and
+problem statement). This brief is the answer to that document's section 4.
+
+
+=============================================================================
+1. WHAT THIS IS
+=============================================================================
+
+One paragraph, for the App Store listing and for keeping yourself honest:
+
+  An infinite canvas built for handwriting, with an AI tutor living inside the
+  canvas rather than in a chat window beside it. You bring problems in — the
+  app generates them, or you import a page and mark them — you work them by
+  hand with a pencil, and the tutor watches your strokes as you write. When you
+  stall, erase in frustration, or take a wrong turn, it places a hint on the
+  canvas next to your work. It never leads with the answer. You bring your own
+  API key; nothing you write leaves your device except the problem region you
+  are actively working on, sent to the provider you chose.
+
+The single sentence that decides arguments:
+
+  We are building the thing that notices the moment your reasoning bends.
+  Everything else is in service of that.
+
+WHAT THIS IS NOT
+  - Not a homework-answer app. See section 3.
+  - Not a note-taking app. Notability, GoodNotes, and Freeform own that. If a
+    feature only makes sense for note-taking and not for working problems, it
+    is out of v1 and probably out of the product.
+  - Not a curriculum. We do not own content, standards alignment, or grading.
+  - Not a chat interface with a canvas attached. If a feature works equally
+    well as a chat message, it is not this product.
+
+
+=============================================================================
+2. WHO IT IS FOR
+=============================================================================
+
+v1 target user, precisely:
+
+  A high-school-through-early-undergraduate student working symbolic math or
+  quantitative science by hand on an iPad with an Apple Pencil, on practice
+  sets and homework, alone, at a desk, with intent to actually learn it.
+
+Design consequences of that specificity:
+  - Sessions are 20-90 minutes, not 3 minutes. Startup cost can be higher than
+    a note app; interruption cost is much higher.
+  - The user's hands are on the Pencil. Every interaction the tutor requires
+    should be reachable without putting it down.
+  - The user is frequently stuck and mildly demoralized. Tone is a feature.
+  - The user is not paying for a subscription in v1 — they are pasting an API
+    key. That selects for a technically comfortable early adopter, which is
+    fine and correct for v1, and is a distribution ceiling to solve later.
+
+Explicitly NOT the v1 user: essay writers, note-takers, collaborative study
+groups, teachers assigning work, and anyone on a device without a stylus.
+
+
+=============================================================================
+3. THE NON-NEGOTIABLE: HINTS, NEVER ANSWERS
+=============================================================================
+
+This is a product constraint, not a setting, not a config value, and not
+something a user preference toggle may override.
+
+Two independent reasons, both sufficient on their own:
+
+  PEDAGOGICAL. The value in the prototype was never the answer. It was
+  identifying the class of error mid-work. A student who receives the answer
+  learns that they were wrong; a student who receives the smallest sufficient
+  nudge learns why, and produces the step themselves. The second is the
+  product.
+
+  COMMERCIAL AND INSTITUTIONAL. An app positioned as "AI that does your
+  homework" has a short life: app-store scrutiny, school-district blocks,
+  academic-integrity press, and a permanent ceiling on institutional sales. An
+  app positioned as "AI that catches you the moment you go wrong" is sellable
+  to the institution that would otherwise ban it. This is the difference
+  between a feature and a company.
+
+Hard rules, enforced in Layer 1 and covered by tests:
+
+  R1. The tutor never emits a final answer to the problem as stated, at any
+      hint level, under any prompt, including when the student explicitly asks
+      for it.
+  R2. The tutor never executes more than one forward step in a single hint.
+  R3. Hint level never advances without an intervening student attempt or an
+      explicit student request for more help.
+  R4. The tutor refuses to operate when the app is in Exam Mode, and refuses
+      when the student states they are in a proctored assessment. Refusal is a
+      first-class response type, not an error.
+  R5. Response parsing rejects and regenerates any provider output that
+      violates R1 or R2. The model is not trusted to obey the ladder; the
+      ladder is enforced by our code on the way out.
+
+  OPINION: R5 is the one people skip and the one that matters. Prompting alone
+  will hold ~95% of the time, and the 5% is exactly the screenshot that ends up
+  on a teacher's desk. The enforcement layer is a Layer 1 validator that runs on
+  every parsed response and can force a retry at the same level. Building it in
+  M6 costs maybe a day. Retrofitting it after a bad review costs the launch.
+
+
+=============================================================================
+4. THE FOUR-LEVEL HINT LADDER
+=============================================================================
+
+Worked against the prototype's real example throughout:
+    simplify (3x^2 - 12)/(x^2 + x - 6)
+    student has written: cancelled x^2 against x^2, then 12 against 6
+
+  LEVEL 1 — ORIENT
+    Points attention at the location of the trouble. Names no mathematics.
+    Answers "where should I be looking?"
+    Example: "Take another look at the step where you cancelled. Something
+              there isn't allowed yet."
+    Length: one sentence. Never contains an operator or a variable.
+
+  LEVEL 2 — PRINCIPLE
+    States the general rule that was violated, in the abstract. Does not touch
+    the student's numbers. Answers "what rule am I breaking?"
+    Example: "You can only cancel factors, not terms. A sum has to be factored
+              before anything in it can cancel."
+    Length: one or two sentences. May contain generic notation, never the
+    student's specific expression.
+
+  LEVEL 3 — APPLIED NUDGE
+    Applies the principle to the student's actual expression and poses the next
+    sub-question. Stops immediately before executing it. Answers "what do I do
+    next?"
+    Example: "Factor the top and bottom completely before cancelling anything.
+              Start with the top — what's the common factor? Then: what pair
+              multiplies to -6 and adds to +1?"
+    Length: up to three sentences. Ends on a question the student answers.
+
+  LEVEL 4 — ONE WORKED STEP
+    Performs exactly one step and hands control back. Never the last step of
+    the problem. Answers "I'm still stuck, show me one."
+    Example: "The top factors to 3(x^2 - 4). Take it from there — x^2 - 4 has
+              one more factorization in it."
+    Requires: an explicit student request AND at least two prior attempts on
+    this problem. Never fires from a stall alone.
+    Hard stop: if the only remaining step is the final one, Level 4 degrades to
+    Level 3 rather than finishing the problem.
+
+ESCALATION RULES
+  - Every problem starts at Level 1.
+  - Advance one level only when: the student has produced new strokes since the
+    last hint AND the error persists, or the student explicitly asks for more.
+  - Never skip a level.
+  - Never descend a level within a problem.
+  - Level 4 is capped at twice per problem. After the second, the tutor offers
+    to set the problem aside and return to it, rather than continuing.
+  - If the student's new strokes show the error was corrected, reset to Level 1
+    and say so briefly. Recognition is a hint type.
+
+  OPINION: the "reset and acknowledge" behavior is worth building even though it
+  produces no instructional content. In the prototype the single most motivating
+  message was "Good — numerator is right so far." The tutor being visibly aware
+  that you fixed it is a large part of why the loop feels like a person.
+
+
+=============================================================================
+5. THE TUTOR LOOP
+=============================================================================
+
+The prototype polled on a fixed interval. That is the wrong architecture and
+replacing it is the core technical bet of this product. The tutor fires on
+events, not on a timer.
+
+TRIGGER EVENTS (any one arms an evaluation)
+
+  T1. STALL — no new stroke for `stallThreshold` while a problem is active and
+      has at least one stroke of student work. The primary trigger.
+  T2. ERASE BURST — more than `eraseBurstFraction` of the strokes written in
+      the last `eraseBurstWindow` have been erased. Signals the student has
+      detected an error but not diagnosed it. Highest-value moment in the whole
+      session; the student is receptive and specifically confused.
+  T3. EXPLICIT ASK — student writes "?" inside a problem region, or taps the
+      hint affordance. Bypasses cooldown. Never suppressed.
+  T4. LONG DWELL — more than `dwellThreshold` on one problem with continuing
+      strokes but no structural progress. Catches the student who is busily
+      going nowhere; T1 never fires for them.
+  T5. PROBLEM COMPLETE — student's strokes enter the next problem's region, or
+      a boxed/underlined result is detected. Triggers evaluation, not a hint:
+      records whether the problem was solved and how, for the session summary.
+
+SUPPRESSION RULES (all evaluated before a hint is placed)
+  - Never fire while a stroke is in progress.
+  - `hintCooldown` since the last placed hint, except for T3.
+  - `postHintQuietPeriod` after a hint is placed, during which T1 cannot fire
+    at all — the student is reading.
+  - `maxHintsPerProblem` cap, after which the tutor goes quiet until T3.
+  - Never fire on a problem region with no student strokes in it. An empty
+    problem is not a stuck student; it is a student who hasn't started.
+
+THE EVALUATION PIPELINE (Layer 1 orchestrates; Layer 2 does the I/O)
+
+  1. Trigger fires. Tutor state machine decides evaluate or suppress.
+  2. Assemble context for the ACTIVE PROBLEM ONLY:
+       - a rasterized crop of the problem region (Layer 2 protocol, see below)
+       - the problem statement as text, if known
+       - stroke-order and timing metadata as structured text
+       - hints already given on this problem, and the current ladder level
+       - the student's prior error classes this session
+  3. Send through the AIProvider protocol.
+  4. Parse into a typed TutorResponse: { level, hintText, targetAnchor,
+     errorClass, confidence, refusal? }.
+  5. Validate against R1/R2. On violation, regenerate once at the same level;
+     on second violation, drop to a level-1 orienting hint and log it.
+  6. Below `confidenceFloor`, place nothing. Silence beats a wrong hint —
+     a hint pointing at a correct step actively destroys trust.
+  7. Place the hint on the canvas, anchored near `targetAnchor`, never
+     overlapping student ink.
+
+  OPINION — SEND AN IMAGE, NOT A POINT LIST. Frontier models read a rendered
+  crop of handwritten math far more reliably than any serialization of stroke
+  coordinates, and the prototype proved the image path works. Stroke data is
+  still captured and stored (Invariant 2 requires it) and is sent alongside as
+  *metadata* — order, timing, pauses, erasures — which is signal the image
+  cannot carry. This creates a Layer 2 protocol, `StrokeRasterizing`, because
+  Layer 1 cannot rasterize anything without CoreGraphics. Layer 1 decides WHAT
+  region to render and at what scale; Layer 2 renders it. Rendering parameters
+  are config values, because image resolution is the single biggest lever on
+  both cost and accuracy and you will tune it constantly.
+
+HINT PRESENTATION
+  Hints appear as canvas objects — not a sidebar, not a toast, not a modal.
+  They are pinned near the relevant work, they persist, they are dismissible,
+  and they scroll with the canvas. A hint the student scrolled away from is a
+  hint they can scroll back to.
+
+
+=============================================================================
+6. v1 SCOPE
+=============================================================================
+
+The test for inclusion: does removing it break the loop in section 5?
+
+IN — v1 SHIPS WITH
+  - Infinite canvas: pan, zoom, effectively unbounded extent.
+  - Ink: pencil, highlighter, eraser. Color and width selection. Undo/redo.
+  - Normalized stroke model as source of truth (Invariant 2), with a cached
+    render representation.
+  - Palm rejection and Pencil-only-draw mode.
+  - Multiple documents, local persistence through the repository protocol,
+    mutations as discrete ordered operations (Invariant 4).
+  - Work regions: first-class model objects with bounds, a kind (v1 ships one,
+    `.mathProblem`), state (untouched / in-progress / complete / set-aside),
+    hint history, and level. Named `WorkRegion`, not `ProblemRegion` — see
+    section 10, C2.
+  - Problem creation two ways: AI-generated worksheets, and manual region
+    marking over an imported page.
+  - Import a PDF page or photo as a canvas backdrop, over which the student
+    marks problem regions by hand.
+  - BYO API key in Keychain, behind a protocol. One provider adapter shipped
+    (Anthropic), with a second stubbed to prove the seam is real.
+  - The full tutor loop and four-level ladder.
+  - Exam Mode: an explicit switch that disables the tutor entirely.
+  - End-of-session summary: problems attempted, error classes, hints used.
+  - Settings: the config object exposed as a tuning screen, behind a
+    developer-mode flag.
+
+OUT — DEFERRED, WITH REASONS
+  - Automatic problem segmentation from an imported page. This is a real
+    computer-vision and layout problem and it is the single biggest schedule
+    risk in the product. Manual region marking gets 90% of the value for
+    roughly 5% of the effort, and gives us labelled data for building the
+    automatic version later. v1.1.
+
+    OPINION: I know this is closest to your original framing — "import
+    homework, projects, books." I am not cutting import. I am cutting
+    *automatic* problem detection. The student imports the page and taps four
+    times to mark four problems. If you disagree, the counter-argument is that
+    manual marking is friction at the exact moment of highest abandonment risk
+    — first use. That is a real argument and I'd want to see it fail with a
+    real user before rebuilding the milestone plan around it.
+
+  - Handwriting-to-LaTeX / symbolic recognition on device. Not needed; the
+    model reads the image.
+  - Shapes, multiple fonts, sticky notes, and the rest of Freeform parity.
+    None of it serves the loop.
+  - Sync and CloudKit. Invariant 4 keeps the seam open; v1 does not use it.
+  - Cross-session student modeling. The summary is per-session in v1. Persisting
+    an error profile across sessions is the strongest retention feature in the
+    product and it deserves its own design pass, not a bolt-on.
+  - Accounts, auth, subscriptions, collaboration, teacher dashboards.
+  - iPhone, Mac, Android, Windows. Per existing decisions.
+
+
+=============================================================================
+7. CONFIGURATION OBJECT — TutorConfig
+=============================================================================
+
+Everything below lives in one named struct in Layer 1, with documented
+defaults. No literals scattered in call sites.
+
+  stallThreshold             4.0 s     T1 fires after this much stroke silence.
+                                       Lower = pushier tutor. Below ~2.5s it
+                                       interrupts mid-thought.
+  hintCooldown              20.0 s     Minimum spacing between placed hints.
+  postHintQuietPeriod        8.0 s     T1 fully disabled after a hint lands.
+  dwellThreshold            90.0 s     T4 threshold for busy-but-stuck.
+  eraseBurstFraction         0.40      Fraction of recent strokes erased to
+                                       trigger T2.
+  eraseBurstWindow          10.0 s     Window over which that fraction counts.
+  maxHintsPerProblem         6         Cap before the tutor goes quiet.
+  maxLevel4PerProblem        2         Cap on worked steps.
+  confidenceFloor            0.60      Below this, place nothing.
+  regionRenderScale          2.0       Raster scale for the problem crop.
+  regionRenderMaxEdge     1536 px      Long-edge cap on the sent image. The
+                                       main cost/accuracy lever.
+  regionPaddingFraction      0.08      Padding around the region when cropping.
+  strokeDebounce           400 ms      Stroke-completion debounce. Named for
+                                       the PencilKit partial-stroke behavior.
+  ladderRequiresAttempt      true      Feature flag. Off = escalate on stall
+                                       alone. For testing only.
+  enforceNoAnswer            true      Feature flag on the R1/R2 validator.
+                                       Never ship this false.
+
+
+=============================================================================
+8. MILESTONES
+=============================================================================
+
+Each ends with something running on a physical iPad, and states what you should
+see when it works.
+
+  M0 — SKELETON
+    Xcode project, three targets matching the three layers, Layer 1 as a
+    standalone Swift package with a Linux CI job running its tests.
+    You should see: app launches to a blank canvas; CI green on Linux.
+
+  M1 — INK
+    PencilKit capture -> normalized stroke model -> render. Infinite pan/zoom.
+    Undo/redo. Palm rejection.
+    You should see: you can draw, and you cannot tell it apart from Freeform by
+    feel. If you can, stop and fix it before M2. Ink feel outranks everything.
+
+  M2 — PERSISTENCE
+    Documents through the repository protocol. Mutations as ordered operations.
+    UUID + lastModified + owner on every model object.
+    You should see: draw, force-quit, relaunch, everything is exactly there.
+
+  M3 — PROBLEM MODEL
+    Problem regions, per-problem state, manual region creation by lasso or tap.
+    You should see: circle an area, it becomes "Problem 1", its state chip
+    changes as you write in it.
+
+  M4 — PROVIDER SEAM
+    Keychain key entry, AIProvider protocol, Anthropic adapter, region
+    rasterization. A debug button that sends the active region and shows the
+    raw model reading of your handwriting.
+    You should see: write something messy, tap debug, watch the model read it
+    back correctly. This is the go/no-go for the whole product.
+
+  M5 — TUTOR LOOP, ONE LEVEL
+    Stall detection (T1), evaluation pipeline, hints placed on canvas at
+    Level 2 only.
+    You should see: write a wrong step, stop for four seconds, a hint appears
+    next to your work without you doing anything.
+
+  M6 — THE LADDER
+    All four levels, escalation rules, all triggers T2-T5, cooldowns,
+    suppression, the R1/R2 validator, TutorConfig wired to a settings screen.
+    You should see: hints escalate only after you try again; asking for the
+    answer outright gets you a nudge instead.
+
+  M7 — PROBLEMS IN
+    AI worksheet generation into problem regions. PDF/photo import as backdrop
+    with manual region marking.
+    You should see: "generate 10 ALEKS-style problems", they lay out on the
+    canvas with working room, and the tutor works against them.
+
+  M8 — SESSION SUMMARY, EXAM MODE, TESTFLIGHT
+    End-of-session error-pattern summary. Exam Mode switch. Onboarding for key
+    entry. Ship to TestFlight.
+    You should see: finish a session, get a summary that tells you something
+    about yourself you didn't already know.
+
+  OPINION ON ORDERING: M4 before M5 is deliberate. The riskiest assumption in
+  the product is that a frontier model reads *your* handwriting, at *your*
+  raster settings, reliably enough to diagnose from. The prototype proved it for
+  a Freeform screenshot on a Mac. It has not been proven for our render path.
+  Find out in M4, when the sunk cost is four milestones instead of eight.
+
+
+=============================================================================
+9. OPEN QUESTIONS
+=============================================================================
+
+  Q1. Cost per hint. At the default raster settings, unknown. Measure in M4 and
+      set regionRenderMaxEdge from real numbers. If a 60-minute session costs
+      more than a dollar of the student's own key, the defaults are wrong.
+  Q2. Latency budget. How long between stall and hint before the loop stops
+      feeling live? My guess is 3-4 seconds of model time is tolerable because
+      the student is already stopped. Untested.
+  Q3. Conflict semantics. Ordered operations are chosen to keep a CRDT possible.
+      We are explicitly deferring real merge semantics; note the deferral in the
+      decisions log at M2 rather than pretending it's solved.
+  Q4. Error-class taxonomy. The session summary needs a fixed vocabulary of
+      error classes for the model to select from, or the summaries will be
+      mush. Needs a design pass before M8. Partially resolved: the taxonomy is
+      namespaced by domain from the start — see section 10, C5.
+  Q5. What happens on a wrong hint. There is no correction path in this brief.
+      A "that's not my problem" gesture that re-evaluates is probably necessary
+      and is not scoped.
+
+=============================================================================
+10. FORWARD COMPATIBILITY WITH v1.5 — NOT OPTIONAL
+=============================================================================
+
+Added 2026-08-13 after v1.5 was scoped to include text-based work: literature
+analysis, document analysis, reading assignments, writing, and mechanics. Full
+detail in brief/v15-addendum.txt.
+
+Six changes to v1. None of them add a v1 feature. All of them exist purely to
+prevent v1.5 from being a schema migration against real user data — the exact
+failure Invariant 4 is written to prevent. Two of them (C2, C5) are pure
+naming and cost nothing today, which is why they are the ones most likely to
+get skipped.
+
+  C1  [M2]  Canvas elements are polymorphic. The document is a collection of
+            `CanvasElement`, not a collection of strokes. v1 kinds:
+            `.strokeGroup`, `.image`, `.hint`. v1.5 adds `.textBlock`,
+            `.sourceDocument`, `.outlineNode`. UUID + lastModified + owner on
+            every element regardless of kind.
+
+  C2  [M3]  `WorkRegion`, not `ProblemRegion`, carrying a `kind`. v1 ships
+            `.mathProblem` only. v1.5 adds `.readingPassage`,
+            `.outlineSection`, `.draftSection`. State value "solved" is named
+            "complete" for the same reason.
+
+  C3  [M6]  `HintLadder` is a protocol declaring the four levels, escalation
+            rules, and validation hooks. `MathLadder` conforms in v1;
+            `WritingLadder` and `ReadingLadder` conform in v1.5 without the
+            tutor state machine changing. Invariant 3 applied to our own
+            domain logic, not just to external dependencies.
+
+  C4  [M5]  `EvaluationContext` is composable, not "an image plus metadata."
+            v1 uses `.rasterizedRegion`. v1.5 adds `.textSpan`,
+            `.documentChunks`, `.outlineGraph` without the section 5 pipeline
+            changing shape.
+
+  C5  [M8]  Error classes are namespaced by domain from the start:
+            `math.cancellation.termsNotFactors`,
+            `writing.paragraph.claimDrift`, `reading.inference.unsupported`.
+            Flat taxonomies do not survive a second domain.
+
+  C6  [M7]  Imported documents store extracted text, with character offsets
+            and page mapping, even though v1 never reads it. v1 renders the
+            backdrop image; v1.5 needs the text. Extraction at import time is
+            nearly free. Backfilling it across every document every user has
+            already created is a migration written under pressure.
+
+The v1 hard rules in section 3 gain R6 in v1.5 — the prose rule — which is
+stricter than R1/R2 because in writing the prose IS the artifact, and a leaked
+paragraph is a submittable deliverable rather than a partial hint. R6 does not
+constrain v1, but the R1/R2 validator built in M6 must be structured so a
+second domain's rule set drops in beside it.
+
+=============================================================================
+END OF FOUNDING BRIEF
+=============================================================================
