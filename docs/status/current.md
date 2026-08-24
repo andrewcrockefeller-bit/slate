@@ -37,11 +37,27 @@ Acceptance test still outstanding: draw, force-quit from the app switcher,
 relaunch, and the work should be exactly there. **Do this first in Claude
 Code** — everything built since M2 sits on top of unverified persistence.
 
-**M3 — problem model. Not yet started as its own milestone**, though
-`WorkRegion` (with `kind`, state, ordinal, claiming-by-bounds) already exists
-in the document model from M2's C1/C2 forward-compatibility work. What M3
-actually needs: manual region creation by lasso or tap in the UI, and the
-state-chip UI reacting to `regionsNeedingStateUpdate`.
+**M3 — problem model. Domain layer DONE; UI creation gesture NOT built.**
+This was done as part of the "Checkpoint 2026-08-13 19:50" commit alongside
+finishing M2's file-backed repository, rather than under its own milestone
+commit — easy to undersell if you only read commit messages. What actually
+exists: `WorkRegion` (kind, state, ordinal), the centre-of-bounds claiming
+rule (a stroke belongs to whichever region contains the centre of its path
+bounds — chosen over any-overlap or full-containment so spilled ink still
+counts, see `docs/decisions.md`), `captureBounds` (grows to cover everything
+claimed, then pads, so a model crop never clips the bottom of a fraction),
+observed vs. declared region state (`untouched`/`inProgress` follow from
+whether there's ink in the region; `complete`/`setAside` are judgements that
+survive an erase without silently un-finishing the problem), and a full test
+suite (`WorkRegionTests.swift`). `WorkRegionID` — added speculatively at M0 —
+was deleted; regions are addressed by `ElementID` like every other canvas
+element.
+
+What M3 still needs, and hasn't been started: manual region creation by
+lasso or tap in the UI, and a state-chip UI reacting to
+`regionsNeedingStateUpdate`. Nothing in the founding brief's M3 acceptance
+test ("circle an area, it becomes 'Problem 1', its state chip changes as you
+write in it") has been run.
 
 **M4 — provider seam. Layer 1 and Layer 2 code complete; NOT YET WIRED TO THE
 UI, NOT YET RUN AGAINST THE REAL API.** This is the founding brief's
@@ -93,6 +109,16 @@ UI, NOT YET RUN AGAINST THE REAL API.** This is the founding brief's
   regeneration. `Tools/push-ssh.command` pushes — though with Claude Code
   running natively, `git push` directly from its own shell should work now;
   keep the `.command` files as a fallback for when you want to push by hand.
+- `M0-xcode-setup.txt` — the original first-time Xcode project setup and
+  signing runbook. Steps 1–5 (creating the project by hand) are superseded by
+  `setup-mac.sh` + XcodeGen; step 6 (signing, running on the iPad, trusting
+  the cert) still applies verbatim.
+- `M1-test-plan.txt` — the three-level M1 test procedure: automated tests,
+  an on-device run, and the ink-feel checklist that actually decided the
+  milestone (not the automated tests — feel is the acceptance criterion).
+  Worth reading once as the template for what a milestone's device test
+  should look like; M4's acceptance test (below) hasn't gotten this
+  treatment yet and probably should before it's declared done.
 - Bundle ID `com.andrewrock.slate`; `DEVELOPMENT_TEAM` pinned in `project.yml`
   because regeneration discards anything Xcode's UI sets.
 - Device runs need Developer Mode on the iPad, which only appears after Xcode

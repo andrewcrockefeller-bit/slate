@@ -22,11 +22,22 @@ Full context, read before anything architectural:
   rule), text-domain triggers, milestones M9–M14.
 - `docs/brief/origin-context.txt` — the prototype origin story and the
   problem statement this whole product answers.
-- `docs/decisions/log.md` — architectural decisions, dated, with the options
-  considered and the reason. Append to it; do not rewrite history.
+- `docs/decisions.md` — architectural decisions, dated, with the options
+  considered and the reason. Append to it; do not rewrite history. This is
+  the canonical copy — it existed in the repo before this file did, and is
+  substantially more complete than any other copy. If you ever see a
+  `docs/decisions/` directory instead, that was a duplicate created by
+  mistake on 2026-08-14 and should not exist — merge anything in it into
+  this file and remove it.
 - `docs/status/current.md` — **read this first.** Where the build actually
   stands right now: which milestone, what's built, what's unverified, what's
   next. Keep it current as you finish work.
+- `M0-xcode-setup.txt`, `M1-test-plan.txt` — runbooks for those two
+  milestones specifically: first-time Xcode project setup and signing, and
+  the three-level M1 test procedure (automated tests, on-device run, the
+  ink-feel checklist that actually decides the milestone). Superseded in
+  part by `setup-mac.sh` where noted at the top of each, kept for the parts
+  that still apply — signing steps, the acceptance checklists.
 
 These same documents also live in a claude.ai Project ("AI Live tutoring")
 that Andrew uses for planning conversations outside the terminal. The two
@@ -160,7 +171,7 @@ repeatedly. Therefore:
   partial strokes mid-gesture" is worth writing. "// increment counter" is
   not.
 - When you make a non-obvious architectural choice, add a short decision
-  note to `docs/decisions/log.md` with the date, the options, and the
+  note to `docs/decisions.md` with the date, the options, and the
   reason.
 - Keep files small and single-purpose. If a file passes ~400 lines, propose
   a split.
@@ -180,7 +191,7 @@ repeatedly. Therefore:
   it ourselves, and state what happens if it is abandoned.
 - When he asks for a change that violates an invariant, push back once with
   the reason. If he confirms, do it and log the exception in
-  `docs/decisions/log.md`.
+  `docs/decisions.md`.
 - Ink feel outranks every other consideration. If a change risks stroke
   latency, say so before writing it.
 - On tutoring behavior specifically: this app never hands a student a final

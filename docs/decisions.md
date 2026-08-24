@@ -591,3 +591,99 @@ and the condition is exactly the situation that breaks.
 
 This will recur on every milestone that adds a Layer 1 file, which is most of
 them, so it belongs in the script rather than in anyone's memory.
+
+---
+
+## 2026-08-14 — `AnthropicProvider` lives in Layer 1, not Layer 2
+
+**Options.** (a) The whole Anthropic adapter, including request/response
+handling, in Layer 2 alongside the actual socket work. (b) Split: an
+`HTTPTransport` protocol declared in Layer 1, a `URLSessionTransport`
+implementation in Layer 2, and the Anthropic-specific request building,
+response parsing, JSON wire format, and error classification in Layer 1 against
+that protocol.
+
+**Chose (b).** Building a Messages API request body, parsing the reply, pulling
+a JSON object out of text that may be wrapped in a code fence, and classifying
+an HTTP status into a retry decision are all pure data transformations with no
+Apple dependency — and they are where the actual bugs live. Only the socket
+call itself needs `URLSession`. Keeping the adapter logic in Layer 1 means the
+whole request/response cycle, including the ladder-enforcement step (R5), is
+testable on Linux with a stub transport and no network, no key, and no cost.
+`HTTPRequest`/`HTTPResponse` are plain Foundation value types, not `URLRequest`,
+specifically so they don't require `FoundationNetworking` on Linux.
+
+**Cost.** One more protocol and two more small types (`HTTPRequest`,
+`HTTPResponse`) than putting everything in Layer 2 would have needed. Worth it —
+this is the file most likely to need debugging against a real API response
+shape, and Linux-testable beats device-testable for that.
+
+---
+
+## 2026-08-14 — The wire format lives in its own file, separate from the adapter
+
+**Options.** (a) Keep `AnthropicWireRequest`/`AnthropicWireResponse` and friends
+inside `AnthropicProvider.swift`. (b) Split them into `AnthropicWireFormat.swift`.
+
+**Chose (b).** `AnthropicProvider.swift` was approaching 400 lines with both in
+one file. The wire types are a contract with something outside the process —
+Anthropic's actual JSON shape — and are expected to change independently of the
+adapter's logic (retry policy, validation, prompt building). Separating them
+means a wire-format change is a diff in one small file instead of noise inside
+the code that classifies errors and enforces the ladder.
+
+---
+
+## 2026-08-14 — Confidence is clamped, not rejected, when a model returns an out-of-range value
+
+**Options.** (a) Reject a response whose `confidence` is outside 0...1.
+(b) Clamp it into range and continue.
+
+**Chose (b).** A model reporting 1.2 is being enthusiastic about a real
+finding, not returning malformed data — the field means the same thing at 1.2
+as at 1.0, it's just poorly calibrated at the top end. Rejecting it means
+throwing away an otherwise-valid hint over a formatting quirk. The
+`confidenceFloor` check that matters (R5, silence beats a wrong hint) only
+cares about the bottom of the range, which clamping does not touch.
+
+---
+
+## 2026-08-14 — Development moved from Cowork to Claude Code CLI for implementation
+
+**Options.** (a) Keep driving implementation through Cowork's remote-device
+bridge to Andrew's Mac. (b) Move implementation to Claude Code running natively
+in Andrew's Terminal; keep the claude.ai Project for planning and as a second
+copy of this brief/decisions/status documentation.
+
+**Chose (b).** By M4 the bridge's overhead was concrete, not theoretical: every
+file write required a sandbox → send-to-device → write-to-device relay instead
+of a direct write; there was no Swift toolchain in the Cowork sandbox to run
+`swift test` against, so verification depended on Andrew running it and
+reporting back; git operations through the bridge left stale `.lock` files that
+the bridge cannot `rm` (only `mv`), requiring a manual workaround on multiple
+commits; and the SSH push to GitHub failed outright because the bridge's
+network egress does not permit an outbound connection to `github.com:22` —
+pushing required a `.command` file double-clicked on the Mac directly. None of
+that is a property of the code; all of it is a property of working through a
+remote bridge instead of as a native process on Andrew's own machine. Claude
+Code, run from Andrew's Terminal, has his real toolchain, his real git, and his
+real network, and eliminates the relay step for every file.
+
+**What does not change.** Xcode's Signing & Capabilities panel, picking the
+iPad in the destination menu, trusting the dev certificate, and watching the
+app run on device are GUI/hardware steps neither Cowork nor Claude Code
+performs on Andrew's behalf.
+
+**Mechanism.** The project instructions (the five invariants, the
+pre-delivery checklist, "how to work with me," the already-decided list) were
+copied into `CLAUDE.md` at the repo root, and the founding brief, the v1.5
+addendum, and the origin-context document were copied into `docs/brief/`, so
+Claude Code has the same standing context the claude.ai Project has, without
+depending on the Project being open. `docs/decisions.md` (this file) and
+`docs/status/current.md` remain the single canonical copies in the repo — the
+claude.ai Project keeps its own mirror of both, updated by hand. When they
+were found to have drifted (the Project's mirror was missing every M1–M3
+entry below the M0-era baseline, and undersold how much of M3 was actually
+done), the Project's copies were brought back in sync with this file on
+2026-08-14. Whoever next changes an invariant, adds a decision, or updates
+status should update both, or at minimum note here that they diverged again.
