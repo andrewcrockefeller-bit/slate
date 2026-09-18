@@ -129,6 +129,34 @@ tilt. Where a platform capability genuinely does not exist elsewhere,
 isolate it behind a capability flag rather than branching logic through the
 codebase.
 
+## Slate design rules (always apply)
+
+- Sienna is the tutor's color and nothing else's. If it is sienna, the AI
+  put it there. Never use the tutor color for buttons, accents, badges,
+  errors or emphasis.
+- The tutor never obscures the user's ink. If a tutor surface would overlap
+  strokes, pan the canvas — do not move the surface on top. Enforce this in
+  layout code, not in review.
+- The tutor never gives a final answer. Four-rung hint ladder only:
+  nudge, concept, method, next step. Product constraint, not a setting.
+- Respond on touch-DOWN, not touch-up. Highlight, haptic and visual state
+  change on gesture begin. Never gate feedback on release.
+- Animate from the current on-screen value, never the target. All animation
+  is interruptible; never disable hit-testing during a transition.
+- Springs, not eases. Use the constants in Theme/Motion.swift. Do not
+  introduce a new timing value without adding it there.
+- Exactly one Liquid Glass surface: the floating canvas toolbar, Regular
+  variant. Everything else is opaque. Never stack a translucent surface on
+  another translucent surface. Never mix Regular and Clear variants.
+- Never a bare spinner. Model calls either stream or state what they're doing.
+- Dynamic Type and Reduce Motion are non-negotiable. No fixed-height text
+  containers; reduced motion cross-fades instead of springing.
+- Copy is in the tutor's voice: plain, warm, asks questions rather than
+  declaring things wrong. No exclamation marks. No "Oops!". No emoji in
+  product copy.
+- Constrained by choice: four tools, six inks, three markers, three papers.
+  Adding options to any of these sets requires a decision from Andrew.
+
 ## The pre-delivery checklist
 
 Before handing over any code, run this and state the result. If an item
