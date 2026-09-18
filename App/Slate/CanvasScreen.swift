@@ -12,6 +12,8 @@ struct CanvasScreen: View {
     let environment: AppEnvironment
 
     @StateObject private var controller: CanvasController
+    @State private var isShowingAPIKeySettings = false
+    @State private var isShowingDebugResult = false
     @State private var paperStyle: PaperStyle = .plain
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
@@ -20,7 +22,10 @@ struct CanvasScreen: View {
         _controller = StateObject(
             wrappedValue: CanvasController(
                 repository: environment.documents,
-                timeSource: environment.timeSource
+                timeSource: environment.timeSource,
+                rasterizer: environment.rasterizer,
+                aiProvider: environment.aiProvider,
+                config: environment.config
             )
         )
     }
@@ -48,6 +53,12 @@ struct CanvasScreen: View {
         .task {
             await controller.start()
         }
+        .sheet(isPresented: $isShowingAPIKeySettings) {
+            APIKeySettingsView(apiKeyStore: environment.apiKeyStore, providerName: environment.aiProvider.providerName)
+        }
+        .sheet(isPresented: $isShowingDebugResult) {
+            DebugEvaluationResultView(state: controller.debugState)
+        }
     }
 
     private var editingControls: some View {
@@ -73,6 +84,25 @@ struct CanvasScreen: View {
             Divider().frame(height: 20)
 
             paperPicker
+
+            Divider().frame(height: 20)
+
+            Button {
+                isShowingAPIKeySettings = true
+            } label: {
+                Label("API Key", systemImage: "key")
+            }
+
+            // M4's acceptance test: write something messy, tap this, watch the
+            // model read it back correctly. No region model yet, so this reads
+            // the whole canvas — see CanvasController.runDebugEvaluation.
+            Button {
+                controller.runDebugEvaluation()
+                isShowingDebugResult = true
+            } label: {
+                Label("Ask tutor", systemImage: "wand.and.stars")
+            }
+            .disabled(controller.debugState == .running)
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.bordered)

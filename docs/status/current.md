@@ -1,6 +1,6 @@
 # Slate — build status
 
-Last updated 2026-08-14.
+Last updated 2026-08-25.
 
 ## Where the code lives
 
@@ -59,9 +59,20 @@ lasso or tap in the UI, and a state-chip UI reacting to
 test ("circle an area, it becomes 'Problem 1', its state chip changes as you
 write in it") has been run.
 
-**M4 — provider seam. Layer 1 and Layer 2 code complete; NOT YET WIRED TO THE
-UI, NOT YET RUN AGAINST THE REAL API.** This is the founding brief's
-"go/no-go for the whole product" milestone. What exists:
+**M4 — provider seam. WIRED TO THE UI; STILL NOT RUN AGAINST THE REAL API.**
+This is the founding brief's "go/no-go for the whole product" milestone.
+"Ask tutor" and "API Key" buttons now sit next to undo/redo/clear on
+`CanvasScreen`. Tapping "Ask tutor" rasterizes the union of every ink
+stroke's `renderBounds` on the current document (padded per
+`regionPaddingFraction` — there is no region-creation UI yet, so this is the
+whole canvas standing in for "the region," see `docs/decisions.md`
+2026-08-25), sends it through `AnthropicProvider.evaluate`, and shows the
+`TutorResponse` or the error in a sheet. Verified: the Simulator build of the
+App target compiles clean (`xcodebuild … -destination 'platform=iOS
+Simulator,name=iPad Pro 11-inch (M5)'`) and both package test suites still
+pass. **Not yet verified: a real request against the real Anthropic API with
+a real key, on a physical iPad.** That is the actual go/no-go and is the
+next thing to run. What exists in the packages:
 
   - `HintLevel`, `EvaluationContext`, `StrokeTiming`, `TutorResponse`,
     `TutorResponseValidator` (enforces R5 — the ladder, length limits, the
@@ -95,12 +106,11 @@ UI, NOT YET RUN AGAINST THE REAL API.** This is the founding brief's
     bytes (an inked render must differ from a blank one) rather than just
     "did not throw."
 
-  **What's missing before M4 can actually be evaluated:** nothing calls
-  `AnthropicProvider.evaluate` yet. There is no UI for entering an API key, no
-  debug button, no wiring from the canvas to the provider. The founding
-  brief's M4 acceptance test — "write something messy, tap debug, watch the
-  model read it back correctly" — has not been run. That is the first thing
-  to build in Claude Code.
+  **What's left before M4 can actually be evaluated:** the founding brief's
+  acceptance test — "write something messy, tap debug, watch the model read
+  it back correctly" — needs a physical iPad, Andrew's own Anthropic key
+  entered via the new API Key sheet, and a live network connection. Nobody
+  has run it yet.
 
 ## Working setup
 
@@ -175,14 +185,24 @@ directly with no workaround needed.
 
 ## Next
 
-Immediate: run `./Tools/setup-mac.sh` in Claude Code and confirm both test
-suites pass natively (they were only checked for layer purity and reasoned
-about, never compiled, while built through the Cowork bridge). Then the M2
-device acceptance test, still outstanding since 2026-08-13: draw, force-quit,
-relaunch, confirm the work is exactly there.
+Two on-device tests are outstanding, both requiring the physical iPad and
+neither one substitutable by anything run from a Mac:
 
-Then: wire `AnthropicProvider` to a debug button and a Keychain key-entry
-screen so the actual M4 acceptance test can run on a physical iPad — this is
-the real go/no-go for the product, per the founding brief. Everything after
-that (M5's stall-triggered tutor loop) depends on M4 actually working against
-a real key.
+1. **M2 device acceptance test**, outstanding since 2026-08-13: draw,
+   force-quit from the app switcher, relaunch, confirm the work is exactly
+   there. Everything built since M2 sits on unverified persistence until this
+   runs.
+2. **M4 acceptance test**, now unblocked: open the app, tap the key button,
+   enter a real Anthropic API key, write something messy, tap "Ask tutor,"
+   and read what comes back. This is the real go/no-go for the product per
+   the founding brief — cost per hint and whether the model reads this app's
+   raster settings reliably are both still open questions.
+
+Do both before starting M5 (the stall-triggered tutor loop) — M5 assumes M4
+actually works against a real key, and building trigger logic on top of an
+unproven seam risks not being able to tell which layer failed.
+
+After that: the multi-provider brainstorm from 2026-08-24 (Gemini and OpenAI
+adapters behind the existing `AIProvider` protocol, selected in the API Key
+settings screen) is worth a real design pass once M4 is proven on Anthropic,
+not before.

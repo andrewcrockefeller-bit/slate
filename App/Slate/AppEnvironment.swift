@@ -16,39 +16,66 @@ struct AppEnvironment {
     let config: TutorConfig
     let timeSource: any TimeSource
     let documents: any DocumentRepository
+    let apiKeyStore: any APIKeyStore
+    let rasterizer: any StrokeRasterizing
+    let aiProvider: any AIProvider
 
     init(
         config: TutorConfig,
         timeSource: any TimeSource,
-        documents: any DocumentRepository
+        documents: any DocumentRepository,
+        apiKeyStore: any APIKeyStore,
+        rasterizer: any StrokeRasterizing,
+        aiProvider: any AIProvider
     ) {
         self.config = config
         self.timeSource = timeSource
         self.documents = documents
+        self.apiKeyStore = apiKeyStore
+        self.rasterizer = rasterizer
+        self.aiProvider = aiProvider
     }
 
     /// The wiring the shipping app runs with.
     static func live() -> AppEnvironment {
+        let config = TutorConfig.default
         let timeSource = SystemTimeSource()
+        let apiKeyStore = KeychainAPIKeyStore()
 
         return AppEnvironment(
-            config: .default,
+            config: config,
             timeSource: timeSource,
-            documents: FileDocumentRepository(root: documentsRoot(), timeSource: timeSource)
+            documents: FileDocumentRepository(root: documentsRoot(), timeSource: timeSource),
+            apiKeyStore: apiKeyStore,
+            rasterizer: CoreGraphicsStrokeRasterizer(),
+            aiProvider: AnthropicProvider(
+                modelIdentifier: config.anthropicModelIdentifier,
+                transport: URLSessionTransport(),
+                keyStore: apiKeyStore
+            )
         )
     }
 
     /// Deterministic wiring for previews and manual testing.
     ///
-    /// In-memory storage on purpose: a preview that writes real documents would
-    /// litter the store with junk every time Xcode rebuilt it.
+    /// In-memory storage on purpose: a preview that writes real documents, real
+    /// Keychain entries, or real API requests would litter the store — or spend
+    /// the student's own API budget — every time Xcode rebuilt it.
     static func preview(config: TutorConfig = .default) -> AppEnvironment {
         let timeSource = FixedTimeSource.reference
+        let apiKeyStore = InMemoryAPIKeyStore()
 
         return AppEnvironment(
             config: config,
             timeSource: timeSource,
-            documents: InMemoryDocumentRepository(timeSource: timeSource)
+            documents: InMemoryDocumentRepository(timeSource: timeSource),
+            apiKeyStore: apiKeyStore,
+            rasterizer: CoreGraphicsStrokeRasterizer(),
+            aiProvider: AnthropicProvider(
+                modelIdentifier: config.anthropicModelIdentifier,
+                transport: URLSessionTransport(),
+                keyStore: apiKeyStore
+            )
         )
     }
 

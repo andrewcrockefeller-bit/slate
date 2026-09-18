@@ -20,9 +20,20 @@ final class CanvasController: ObservableObject {
         case failed(String)
     }
 
+    /// Outcome of the M4 debug evaluation — "send whatever is on the canvas to
+    /// the tutor and show what came back," with no region model or trigger
+    /// logic yet. That is M5's job; this exists to prove the seam end to end.
+    enum DebugEvaluationState: Equatable {
+        case idle
+        case running
+        case succeeded(TutorResponse)
+        case failed(String)
+    }
+
     @Published private(set) var document: Document?
     @Published private(set) var saveState: SaveState = .loading
     @Published private(set) var lastCapture: String = "nothing captured yet"
+    @Published private(set) var debugState: DebugEvaluationState = .idle
 
     /// Bumped when the canvas should be repainted from the document.
     ///
@@ -37,6 +48,9 @@ final class CanvasController: ObservableObject {
     private let repository: any DocumentRepository
     private let converter: PencilKitInkConverter
     private let timeSource: any TimeSource
+    private let rasterizer: any StrokeRasterizing
+    private let aiProvider: any AIProvider
+    private let config: TutorConfig
 
     /// Suppresses capture while the canvas is being repainted from the
     /// document. Without it, restoring a drawing looks exactly like the user
@@ -52,11 +66,17 @@ final class CanvasController: ObservableObject {
     init(
         repository: any DocumentRepository,
         converter: PencilKitInkConverter = PencilKitInkConverter(),
-        timeSource: any TimeSource
+        timeSource: any TimeSource,
+        rasterizer: any StrokeRasterizing,
+        aiProvider: any AIProvider,
+        config: TutorConfig
     ) {
         self.repository = repository
         self.converter = converter
         self.timeSource = timeSource
+        self.rasterizer = rasterizer
+        self.aiProvider = aiProvider
+        self.config = config
     }
 
     // MARK: - Opening
@@ -211,6 +231,56 @@ final class CanvasController: ObservableObject {
 
     func clear() {
         canvasView?.drawing = PKDrawing()
+    }
+
+    // MARK: - Debug evaluation (M4)
+
+    /// Sends every stroke currently on the canvas to the configured provider
+    /// and reports what came back.
+    ///
+    /// Whole-canvas rather than a region, because `WorkRegion` creation has no
+    /// UI yet (M3). This is deliberately the smallest thing that can answer the
+    /// founding brief's M4 acceptance test — "write something messy, tap debug,
+    /// watch the model read it back correctly" — without waiting on M3 or M5.
+    func runDebugEvaluation() {
+        guard let document else { return }
+        let strokes = document.inkStrokes
+
+        guard !strokes.isEmpty else {
+            debugState = .failed("nothing drawn yet")
+            return
+        }
+
+        let now = timeSource.now
+        let unpadded = strokes.reduce(CanvasRect.zero) { $0.union($1.renderBounds) }
+        let bounds = unpadded.expanded(by: unpadded.longEdge * config.regionPaddingFraction)
+        let timing = StrokeTiming.measuring(strokes, asOf: now)
+
+        debugState = .running
+
+        Task { [weak self, rasterizer, aiProvider, config] in
+            guard let self else { return }
+            do {
+                let region = try await rasterizer.rasterize(
+                    strokes,
+                    bounds: bounds,
+                    scale: config.regionRenderScale,
+                    maximumLongEdge: config.regionRenderMaxEdge
+                )
+
+                let context = EvaluationContext(
+                    image: region,
+                    prompt: nil,
+                    permittedLevel: .orient,
+                    timing: timing
+                )
+
+                let response = try await aiProvider.evaluate(context)
+                await MainActor.run { self.debugState = .succeeded(response) }
+            } catch {
+                await MainActor.run { self.debugState = .failed(Self.shortDescription(error)) }
+            }
+        }
     }
 
     // MARK: - Reporting

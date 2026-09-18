@@ -123,6 +123,15 @@ public struct TutorConfig: Hashable, Sendable, Codable {
     /// rest of the time is the screenshot that ends up on a teacher's desk.
     public var enforceNoAnswer: Bool
 
+    // MARK: - Provider
+
+    /// Which Anthropic model `AnthropicProvider` asks.
+    ///
+    /// The single biggest lever on cost per hint after `regionRenderMaxEdge`.
+    /// Swapping this for a cheaper or faster model is meant to be a one-line
+    /// change here, never a search-and-replace across call sites.
+    public var anthropicModelIdentifier: String
+
     public init(
         stallThreshold: TimeInterval = 4.0,
         hintCooldown: TimeInterval = 20.0,
@@ -138,7 +147,8 @@ public struct TutorConfig: Hashable, Sendable, Codable {
         regionPaddingFraction: Double = 0.08,
         strokeDebounce: TimeInterval = 0.4,
         ladderRequiresAttempt: Bool = true,
-        enforceNoAnswer: Bool = true
+        enforceNoAnswer: Bool = true,
+        anthropicModelIdentifier: String = "claude-sonnet-5"
     ) {
         self.stallThreshold = stallThreshold
         self.hintCooldown = hintCooldown
@@ -155,6 +165,7 @@ public struct TutorConfig: Hashable, Sendable, Codable {
         self.strokeDebounce = strokeDebounce
         self.ladderRequiresAttempt = ladderRequiresAttempt
         self.enforceNoAnswer = enforceNoAnswer
+        self.anthropicModelIdentifier = anthropicModelIdentifier
     }
 
     /// The shipping defaults.

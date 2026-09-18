@@ -57,7 +57,7 @@ public struct CoreGraphicsStrokeRasterizer: StrokeRasterizing {
         // edge cap. Uniformly, so the aspect ratio the student sees is the
         // aspect ratio the model sees — a squashed image changes what a
         // fraction bar looks like.
-        let longestSide = max(bounds.size.width, bounds.size.height)
+        let longestSide = bounds.longEdge
         let cappedScale = longestSide > 0
             ? min(scale, Double(maximumLongEdge) / longestSide)
             : scale

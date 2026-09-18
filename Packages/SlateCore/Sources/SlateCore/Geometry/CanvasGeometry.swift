@@ -72,6 +72,12 @@ public struct CanvasRect: Hashable, Sendable, Codable {
 
     public var isEmpty: Bool { size.width <= 0 || size.height <= 0 }
 
+    /// The longer of the two side lengths.
+    ///
+    /// Shared home for what "long edge" means, so a padding fraction and a
+    /// pixel cap agree on the same measurement rather than each rederiving it.
+    public var longEdge: Double { Swift.max(size.width, size.height) }
+
     public func contains(_ point: CanvasPoint) -> Bool {
         point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY
     }

@@ -104,3 +104,25 @@ public protocol APIKeyStore: Sendable {
     func key(for providerName: String) async throws -> String?
     func setKey(_ key: String?, for providerName: String) async throws
 }
+
+/// An `APIKeyStore` that never touches the Keychain.
+///
+/// For previews and manual testing, same reasoning as
+/// `InMemoryDocumentRepository`: a preview that read or wrote the real
+/// Keychain would leak state between Xcode rebuilds and could collide with a
+/// key the student actually entered.
+public actor InMemoryAPIKeyStore: APIKeyStore {
+    private var keys: [String: String]
+
+    public init(seed: [String: String] = [:]) {
+        self.keys = seed
+    }
+
+    public func key(for providerName: String) async throws -> String? {
+        keys[providerName]
+    }
+
+    public func setKey(_ key: String?, for providerName: String) async throws {
+        keys[providerName] = key
+    }
+}

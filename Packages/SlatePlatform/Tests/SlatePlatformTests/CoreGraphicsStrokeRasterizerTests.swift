@@ -18,11 +18,14 @@ final class CoreGraphicsStrokeRasterizerTests: XCTestCase {
     ) -> InkStroke {
         InkStroke(
             points: [
-                InkPoint(position: start, timeOffset: 0, width: width),
-                InkPoint(position: end, timeOffset: 0.2, width: width)
+                InkPoint.positionOnly(start, timeOffset: 0, width: width),
+                InkPoint.positionOnly(end, timeOffset: 0.2, width: width)
             ],
             style: InkStyle(kind: .pen, color: color, width: width),
-            createdAt: FixedTimeSource.reference.now
+            createdAt: FixedTimeSource.reference.now,
+            hasPressure: false,
+            hasTilt: false,
+            lastModified: FixedTimeSource.reference.now
         )
     }
 
@@ -113,9 +116,12 @@ final class CoreGraphicsStrokeRasterizerTests: XCTestCase {
     // decimal point in "3.14" silently disappears.
     func testASinglePointStrokeStillMarksThePage() async throws {
         let dot = InkStroke(
-            points: [InkPoint(position: CanvasPoint(x: 25, y: 25), timeOffset: 0, width: 6)],
+            points: [InkPoint.positionOnly(CanvasPoint(x: 25, y: 25), timeOffset: 0, width: 6)],
             style: .defaultPen,
-            createdAt: FixedTimeSource.reference.now
+            createdAt: FixedTimeSource.reference.now,
+            hasPressure: false,
+            hasTilt: false,
+            lastModified: FixedTimeSource.reference.now
         )
 
         let drawn = try await rasterizer.rasterize(
@@ -127,9 +133,12 @@ final class CoreGraphicsStrokeRasterizerTests: XCTestCase {
 
         let empty = try await rasterizer.rasterize(
             [InkStroke(
-                points: [InkPoint(position: CanvasPoint(x: 25, y: 25), timeOffset: 0, width: 6)],
+                points: [InkPoint.positionOnly(CanvasPoint(x: 25, y: 25), timeOffset: 0, width: 6)],
                 style: InkStyle(kind: .pen, color: .white, width: 6),
-                createdAt: FixedTimeSource.reference.now
+                createdAt: FixedTimeSource.reference.now,
+                hasPressure: false,
+                hasTilt: false,
+                lastModified: FixedTimeSource.reference.now
             )],
             bounds: CanvasRect(x: 0, y: 0, width: 50, height: 50),
             scale: 1,

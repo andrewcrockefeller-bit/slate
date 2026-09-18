@@ -687,3 +687,61 @@ entry below the M0-era baseline, and undersold how much of M3 was actually
 done), the Project's copies were brought back in sync with this file on
 2026-08-14. Whoever next changes an invariant, adds a decision, or updates
 status should update both, or at minimum note here that they diverged again.
+
+## 2026-08-25 — M4 wired to the UI: whole-canvas debug evaluation, not a region
+
+**Context.** M4 was code-complete (`AnthropicProvider`, the rasterizer, the
+Keychain store) but nothing called it. The founding brief's M4 acceptance test
+is "write something messy, tap debug, watch the model read it back
+correctly," and that requires a UI. M3's manual region-creation gesture
+(lasso/tap → `WorkRegion`) does not exist yet, so there was no "the region the
+student circled" to hand the provider.
+
+**Options.** (a) Build M3's region-creation UI first, then wire M4 against a
+real region. (b) Wire M4 against the whole canvas's ink as a stand-in region,
+prove the seam works, and let M3's region UI slot in later as the source of
+`bounds` instead of "everything drawn so far." (c) Fake the M4 test with a
+canned response and defer both.
+
+**Chose (b).** The go/no-go question M4 exists to answer — does the model
+reliably read *this app's* raster settings, and what does a hint cost — does
+not depend on region boundaries; it depends on whether ink-to-pixels-to-prompt
+survives contact with the real API. Blocking that on M3 (option a) means two
+unproven milestones stacked on each other with no way to tell which one failed
+if the acceptance test doesn't pass. Option (c) proves nothing. `runDebugEvaluation()`
+in `CanvasController` unions every ink stroke's `renderBounds`, pads by
+`regionPaddingFraction` exactly as a real region crop will, and rasterizes
+that — so the only thing that changes when M3 lands is what bounds get passed
+in, not the pipeline itself.
+
+**What shipped.**
+- `TutorConfig.anthropicModelIdentifier` (default `"claude-sonnet-5"`) — the
+  model name was a literal nowhere before; this is the tuning knob the
+  checklist requires.
+- `InMemoryAPIKeyStore` (Layer 1, alongside `InMemoryDocumentRepository`) so
+  `AppEnvironment.preview()` never touches the real Keychain.
+- `CanvasRect.longEdge`, factored out of the rasterizer's inline
+  `max(width, height)` so the new padding math and the existing edge-cap math
+  agree on what "long edge" means.
+- `AppEnvironment` now assembles and hands down `apiKeyStore`, `rasterizer`,
+  and `aiProvider` alongside the existing `documents`/`timeSource`, per the
+  "given, not reached for" rule already governing this file.
+- Two new Layer 3 screens: `APIKeySettingsView` (Keychain entry, one provider
+  at a time, addressed by `providerName` so it generalizes to Gemini/OpenAI
+  without changing shape) and `DebugEvaluationResultView` (renders a
+  `TutorResponse` or an `AIProviderError` description — nothing decides
+  whether the hint is *good*; that judgement is the point of the on-device
+  test and stays with whoever is holding the iPad).
+
+**Deferred, on purpose.** No trigger logic (stall detection, cooldowns) —
+that is M5 and belongs behind `TutorConfig`'s timing fields, not this
+milestone. No hint-placement-on-canvas UI — the result sheet is a debug view,
+not the product surface. No multi-provider picker yet — `AIProvider` already
+supports it (Invariant 3); adding Gemini/OpenAI adapters is a separate,
+explicitly-scoped piece of work, not bundled into proving the first one
+works.
+
+**Still unverified.** This has only been checked against a Simulator build of
+the App target for compile correctness. It has not been run against the real
+Anthropic API with a real key on a physical iPad — that is the actual M4
+go/no-go and needs Andrew's device.

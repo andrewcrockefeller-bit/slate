@@ -1,0 +1,178 @@
+=============================================================================
+HOW TO TEST SLATE — M4 (provider seam)
+=============================================================================
+
+This is the founding brief's "go/no-go for the whole product" milestone. The
+question it answers: does a frontier model reliably read YOUR handwriting, at
+THIS APP'S render settings, well enough to diagnose from? Everything after M4
+(the stall-triggered tutor loop, the hint ladder) assumes the answer is yes.
+Nobody has run this test yet.
+
+There are two levels. Level 1 only proves the code compiles and the logic is
+sound — it cannot prove the model can read your writing. Level 2 is the one
+that decides the milestone, and it costs real money against your own API key.
+
+  LEVEL 1   Automated tests + build   Does it compile?         ~2 minutes
+  LEVEL 2   Run on the iPad           Does the model read it?  ~10 minutes
+
+Do M2's outstanding test first if you haven't: draw, force-quit from the app
+switcher, relaunch, confirm the work is exactly there. Everything below sits
+on top of that persistence layer.
+
+
+-----------------------------------------------------------------------------
+BEFORE YOU START — GET AN ANTHROPIC API KEY
+-----------------------------------------------------------------------------
+
+Slate is bring-your-own-key: it talks to Anthropic directly, no Slate backend
+in between, so you need your own key.
+
+  1. Go to console.anthropic.com and sign in (or create an account).
+  2. Add billing — API usage is pay-as-you-go, separate from any Claude.ai
+     subscription you might have.
+  3. Settings > API Keys > Create Key. Copy it somewhere you can paste from
+     on the iPad (Notes, a password manager — anywhere but a screenshot).
+
+Keep the tab open. You'll want to check token usage / cost after the test.
+
+
+-----------------------------------------------------------------------------
+LEVEL 1 — AUTOMATED TESTS + BUILD
+-----------------------------------------------------------------------------
+
+One command, same as every milestone:
+
+      cd ~/Claude\ Code/slate
+      ./Tools/setup-mac.sh
+
+WHAT PASSING MEANS
+  The prompt builder produces the right text, the response validator enforces
+  the hint ladder (R5) correctly, the Anthropic wire format parses realistic
+  and malformed replies the same way, and the rasterizer produces real pixel
+  data from ink. None of this proves the real API understands your ink — it
+  proves that if the API behaves the way the tests assume, everything wired
+  around it behaves correctly.
+
+WHAT PASSING DOES NOT MEAN
+  No network call happens anywhere in this step. This has already been run
+  and confirmed green as of this writing (176 SlateCore tests, 35 SlatePlatform
+  tests, App target builds clean for iPad Simulator).
+
+
+-----------------------------------------------------------------------------
+LEVEL 2 — RUN IT ON THE IPAD, FOR REAL
+-----------------------------------------------------------------------------
+
+STEPS
+  2.1  open Slate.xcodeproj
+  2.2  Signing & Capabilities > Team = your Apple ID, if not already set.
+  2.3  Plug in the iPad, unlock it, pick it in the destination menu (not a
+       Simulator — same rule as every other milestone: the canvas is
+       .pencilOnly, a mouse/finger in the Simulator just scrolls it).
+  2.4  Cmd-R. First run may stop at a signing error — on the iPad:
+           Settings > General > VPN & Device Management > Trust
+       Then Cmd-R again.
+
+  2.5  You'll see the same canvas as M1-M3, but now with two new buttons
+       top-right, after a divider past Clear:
+           - a key icon ("API Key")
+           - a wand icon ("Ask tutor")
+
+  2.6  Tap the key icon. A sheet asks for an API key. Paste the key you
+       created above. Tap Save.
+           Note: the key is stored in this device's Keychain only. It does
+           not sync via iCloud to your other devices — you'd enter it again
+           on an iPhone or a second iPad.
+
+  2.7  On the canvas, write something messy — an actual worked problem, not
+       a scribble. Something with a deliberate mistake in it is the most
+       useful test, since a hint pointing at the real error is a much
+       stronger signal than a vague "looks fine."
+
+  2.8  Tap the wand icon ("Ask tutor"). A sheet opens showing "Asking the
+       tutor..." and then one of two outcomes.
+
+
+-----------------------------------------------------------------------------
+WHAT SUCCESS LOOKS LIKE
+-----------------------------------------------------------------------------
+
+The sheet shows:
+  - a rung number (should be "Rung 1" — Level 1/orient — since the debug
+    button always asks for the lowest hint level)
+  - a confidence score
+  - the hint text itself
+
+READ IT AGAINST WHAT YOU ACTUALLY WROTE. This is the judgement call the app
+cannot make for you — that's the whole point of this milestone being a debug
+view instead of the real product surface. Specifically check:
+
+  [ ] Did it correctly read your handwriting, not misread a symbol?
+  [ ] Does the hint point at something real in your work, not something
+      generic that could apply to any problem?
+  [ ] Is it a HINT — pointing at where to look — and not the answer itself?
+      (The validator is supposed to enforce this app-side. If it slips
+      through anyway, that's the single most important thing to report.)
+
+Also worth noting, since it's an open question in the founding brief (Q1):
+  [ ] Go to console.anthropic.com > usage, and see what this one request
+      cost. That's the number the render settings (regionRenderMaxEdge in
+      TutorConfig) get tuned against.
+
+
+-----------------------------------------------------------------------------
+WHAT FAILURE LOOKS LIKE, AND WHAT IT MEANS
+-----------------------------------------------------------------------------
+
+  "nothing drawn yet"
+      You tapped Ask tutor before writing anything. Not a bug.
+
+  "not authorised: ..."
+      No key entered, or Anthropic rejected it (expired, wrong format,
+      billing not set up). Recheck console.anthropic.com.
+
+  "rate limited, retry in Ns" / "rate limited"
+      Hit Anthropic's rate limit. Wait and retry.
+
+  "unreachable: ..."
+      No network, or the request timed out. Slate deliberately does not
+      queue requests while offline (waitsForConnectivity = false) — a hint
+      that arrives after you've moved on is worse than a fast failure. If
+      you have a real connection and still see this, that's worth reporting.
+
+  "malformed response: ..."
+      The model replied with something the parser couldn't extract JSON
+      from. Send me the exact text if you can — this is the seam most
+      likely to be fragile against a real, unpredictable model reply.
+
+  "rejected: ..."
+      The response came back but broke a hint-ladder rule (R5) — wrong rung,
+      too long, looks like it's stating the answer outright, confidence
+      below the floor. This is actually a GOOD failure: it means the
+      validator caught the model doing something it shouldn't. Send me the
+      rejection reason(s) — that's real signal on how the model behaves
+      against this app's prompt.
+
+  "provider refused: ..."
+      Anthropic's own content filtering declined the request.
+
+  App won't build / signing errors
+      Same as every other milestone — see M0-xcode-setup.txt step 6.
+
+
+-----------------------------------------------------------------------------
+WHAT TO SEND ME BACK
+-----------------------------------------------------------------------------
+
+  [ ] Did setup-mac.sh pass?
+  [ ] What did you write, and what did the hint say — verbatim, both?
+  [ ] Rung number and confidence shown?
+  [ ] Did the hint correctly reflect your actual handwriting?
+  [ ] Did it ever give away the answer outright, even partially?
+  [ ] What did the request cost, per console.anthropic.com?
+  [ ] Any failure text, verbatim.
+
+That "did it correctly reflect your actual handwriting" answer is the
+milestone. Everything else here is instrumentation for reaching it.
+
+=============================================================================
