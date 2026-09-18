@@ -12,6 +12,7 @@ struct CanvasScreen: View {
     let environment: AppEnvironment
 
     @StateObject private var controller: CanvasController
+    @State private var paperStyle: PaperStyle = .plain
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     init(environment: AppEnvironment) {
@@ -32,7 +33,7 @@ struct CanvasScreen: View {
         // the palette exactly when the canvas is in use. Found by running it,
         // not by reading it.
         ZStack(alignment: .topLeading) {
-            InkCanvasView(controller: controller)
+            InkCanvasView(controller: controller, paperStyle: paperStyle)
                 .ignoresSafeArea()
 
             statusLine
@@ -68,6 +69,10 @@ struct CanvasScreen: View {
             } label: {
                 Label("Clear", systemImage: "trash")
             }
+
+            Divider().frame(height: 20)
+
+            paperPicker
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.bordered)
@@ -90,6 +95,26 @@ struct CanvasScreen: View {
             } else {
                 content.background(Palette.surface, in: Capsule())
             }
+        }
+    }
+
+    /// INK-2: plain, faint grid, dot grid — exactly three, no ruled paper.
+    /// Adding a fourth requires a decision from Andrew, per CLAUDE.md.
+    private var paperPicker: some View {
+        Menu {
+            ForEach(PaperStyle.allCases, id: \.rawValue) { style in
+                Button {
+                    Haptics.toolSelect()
+                    paperStyle = style
+                } label: {
+                    Label(style.label, systemImage: style.symbolName)
+                    if style == paperStyle {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+        } label: {
+            Label("Paper", systemImage: paperStyle.symbolName)
         }
     }
 

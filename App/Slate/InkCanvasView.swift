@@ -11,6 +11,7 @@ import SlateCore
 struct InkCanvasView: UIViewRepresentable {
 
     @ObservedObject var controller: CanvasController
+    var paperStyle: PaperStyle
 
     /// The drawable extent, in points.
     ///
@@ -26,7 +27,7 @@ struct InkCanvasView: UIViewRepresentable {
     static let maximumZoom: CGFloat = 4.0
 
     func makeUIView(context: Context) -> PKCanvasView {
-        let canvas = PKCanvasView()
+        let canvas = PaperCanvasView()
 
         canvas.delegate = context.coordinator
         canvas.drawing = PKDrawing()
@@ -42,7 +43,7 @@ struct InkCanvasView: UIViewRepresentable {
         canvas.contentSize = Self.canvasExtent
         canvas.minimumZoomScale = Self.minimumZoom
         canvas.maximumZoomScale = Self.maximumZoom
-        canvas.backgroundColor = .systemBackground
+        canvas.paperStyle = paperStyle
         canvas.isOpaque = true
 
         // Start in the middle, so there is room in every direction rather than
@@ -61,6 +62,10 @@ struct InkCanvasView: UIViewRepresentable {
     }
 
     func updateUIView(_ canvas: PKCanvasView, context: Context) {
+        // Cheap regardless of whether it changed — PaperBackground caches
+        // the tiled UIColor, so this is a dictionary lookup, not a redraw.
+        (canvas as? PaperCanvasView)?.paperStyle = paperStyle
+
         // The only thing ever pushed down: repainting the canvas from a
         // document that was just loaded from disk. Assigning `canvas.drawing`
         // unconditionally here would fight the user's own input on every
@@ -126,5 +131,26 @@ struct InkCanvasView: UIViewRepresentable {
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
             controller.ingest(canvasView.drawing)
         }
+    }
+}
+
+/// `PKCanvasView` with one addition: `backgroundColor` is the cached paper
+/// texture rather than a flat color, and it's regenerated when the color
+/// scheme changes, not left stale under the previous appearance's tile.
+private final class PaperCanvasView: PKCanvasView {
+    var paperStyle: PaperStyle = .plain {
+        didSet { applyPaperBackground() }
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+
+        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+            applyPaperBackground()
+        }
+    }
+
+    private func applyPaperBackground() {
+        backgroundColor = PaperBackground.color(for: paperStyle, traitCollection: traitCollection)
     }
 }
