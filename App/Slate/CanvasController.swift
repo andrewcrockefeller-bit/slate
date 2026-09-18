@@ -35,6 +35,10 @@ final class CanvasController: ObservableObject {
     @Published private(set) var lastCapture: String = "nothing captured yet"
     @Published private(set) var debugState: DebugEvaluationState = .idle
 
+    /// True from the moment the Pencil touches down to the moment it lifts.
+    /// UI-3 dims the chrome while this is true — see CanvasScreen.
+    @Published private(set) var isPencilDown = false
+
     /// Bumped when the canvas should be repainted from the document.
     ///
     /// A counter rather than a flag because the view has to be able to tell
@@ -232,6 +236,11 @@ final class CanvasController: ObservableObject {
     func clear() {
         canvasView?.drawing = PKDrawing()
     }
+
+    // MARK: - Pencil state (UI-3)
+
+    func pencilDidTouchDown() { isPencilDown = true }
+    func pencilDidLift() { isPencilDown = false }
 
     // MARK: - Debug evaluation (M4)
 

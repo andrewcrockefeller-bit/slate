@@ -128,6 +128,12 @@ struct InkCanvasView: UIViewRepresentable {
             self.controller = controller
         }
 
+        /// Pen down — UI-3's chrome-yields signal. Fires on touch-down, not
+        /// touch-up, per the "respond on touch-down" rule.
+        func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) {
+            controller.pencilDidTouchDown()
+        }
+
         /// Called when a drawing sequence finishes — pen up.
         ///
         /// Ingesting here rather than in `canvasViewDrawingDidChange` is
@@ -137,6 +143,7 @@ struct InkCanvasView: UIViewRepresentable {
         /// stroke exists.
         func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
             controller.ingest(canvasView.drawing)
+            controller.pencilDidLift()
         }
 
         /// Catches changes that are not the user drawing: undo, redo, erase,

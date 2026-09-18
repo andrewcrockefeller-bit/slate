@@ -18,6 +18,8 @@ struct CanvasScreen: View {
     @State private var toolKind: ToolKind = .fountainPen
     @State private var inkIndex = 0
     @State private var markerIndex = 0
+    @State private var isChromeDimmed = false
+    @State private var chromeReturnTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     init(environment: AppEnvironment) {
@@ -58,13 +60,36 @@ struct CanvasScreen: View {
             editingControls
                 .padding(.horizontal, 20)
                 .padding(.vertical, 14)
+                .opacity(isChromeDimmed ? 0.25 : 1.0)
         }
         .overlay(alignment: .bottom) {
             toolTray
                 .padding(.bottom, 20)
+                .opacity(isChromeDimmed ? 0.25 : 1.0)
         }
         .task {
             await controller.start()
+        }
+        // UI-3: chrome yields to the pencil. Drops the moment a stroke
+        // begins; the return is debounced by Motion.chromeFade so rapid
+        // successive strokes (writing normally) don't flicker the chrome in
+        // and out between each one — only a real pause triggers it.
+        .onChange(of: controller.isPencilDown) { _, isPencilDown in
+            chromeReturnTask?.cancel()
+
+            if isPencilDown {
+                withAnimation(Motion.adaptive(Motion.standard)) {
+                    isChromeDimmed = true
+                }
+            } else {
+                chromeReturnTask = Task {
+                    try? await Task.sleep(for: .seconds(Motion.chromeFade))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(Motion.adaptive(Motion.standard)) {
+                        isChromeDimmed = false
+                    }
+                }
+            }
         }
         .sheet(isPresented: $isShowingAPIKeySettings) {
             APIKeySettingsView(apiKeyStore: environment.apiKeyStore, providerName: environment.aiProvider.providerName)
