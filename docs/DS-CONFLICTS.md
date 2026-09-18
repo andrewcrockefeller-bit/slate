@@ -457,6 +457,19 @@ rather it be updated or removed.
 native `UIScrollView` bounce (inherited through `PKCanvasView`) already
 satisfies the acceptance criterion by hand on device; no code change.
 
+**C-5 — resolved: not implemented.** Confirmed infeasible against native
+`PKCanvasView` rendering, consistent with the same root cause flagged
+during `DS/INK-4` (highlighter z-order) and `DS/INK-8` (undo's reverse-draw
+approximation): PencilKit renders `.drawing` internally, with no
+per-stroke handle this app can attach an opacity animation to. Unlike
+INK-8, no honest partial version exists here — INK-3's effect is specced
+as "subliminal at real speed," and a crude stand-in (e.g. a bounds
+highlight, the approach used for INK-8) would be *more* visible than the
+real effect was ever meant to be, misrepresenting the design rather than
+approximating it. Per your instruction that a minor visual shortfall here
+doesn't matter enough to block on, this is skipped rather than faked. No
+commit — there is no code to land.
+
 **C-3 — accept current behavior, decided during INK-4's implementation.**
 The literal always-behind z-order guarantee turned out to conflict with
 `CanvasController.ingest`'s append-only stroke diffing (see the
