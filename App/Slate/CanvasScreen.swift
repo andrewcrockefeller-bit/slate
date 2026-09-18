@@ -173,27 +173,52 @@ struct CanvasScreen: View {
                 swatchRow(colors: Palette.markers, selectedIndex: $markerIndex)
             }
 
-            HStack(spacing: 12) {
+            HStack(alignment: .bottom, spacing: 12) {
                 ForEach(ToolKind.allCases, id: \.rawValue) { kind in
+                    let isSelected = kind == toolKind
+
                     Button {
                         Haptics.toolSelect()
                         toolKind = kind
                     } label: {
-                        Image(systemName: kind.symbolName)
-                            .font(.system(size: 18, weight: .medium))
-                            .frame(width: 44, height: 44)
+                        ToolSampleView(kind: kind, color: sampleColor(for: kind))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 10)
                             .background(
-                                kind == toolKind ? Palette.hairline : Color.clear,
-                                in: Circle()
+                                isSelected ? Palette.hairline : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            )
+                            // The selected tool physically rises — UI-2.
+                            .scaleEffect(isSelected ? 1.12 : 1.0)
+                            .offset(y: isSelected ? -4 : 0)
+                            .shadow(
+                                color: Palette.graphite.opacity(isSelected ? 0.18 : 0),
+                                radius: 4, y: 2
                             )
                     }
-                    .foregroundStyle(Palette.graphite)
+                    .animation(Motion.adaptive(Motion.standard), value: toolKind)
                     .accessibilityLabel(kind.label)
                 }
             }
         }
         .padding(12)
         .background(Palette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    /// UI-2's "changing ink color changes the picker samples": fountain pen
+    /// and pencil both draw in whichever ink is currently selected, so
+    /// changing that selection updates both samples, not just the active
+    /// tool's. Highlighter always shows the selected marker; eraser ignores
+    /// color entirely.
+    private func sampleColor(for kind: ToolKind) -> Color {
+        switch kind {
+        case .fountainPen, .pencil:
+            return Palette.inks[inkIndex]
+        case .highlighter:
+            return Palette.markers[markerIndex]
+        case .eraser:
+            return Palette.inkFaint
+        }
     }
 
     private func swatchRow(colors: [Color], selectedIndex: Binding<Int>) -> some View {
