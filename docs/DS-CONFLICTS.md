@@ -457,6 +457,19 @@ rather it be updated or removed.
 native `UIScrollView` bounce (inherited through `PKCanvasView`) already
 satisfies the acceptance criterion by hand on device; no code change.
 
+**C-3 — accept current behavior, decided during INK-4's implementation.**
+The literal always-behind z-order guarantee turned out to conflict with
+`CanvasController.ingest`'s append-only stroke diffing (see the
+`DS/INK-4` commit message for the full reasoning) — reordering
+`PKDrawing.strokes` risked misattributing strokes to the wrong document
+operations. Accepted as-is: highlighter uses PencilKit's native `.marker`
+ink type in normal chronological draw order, which is already translucent
+enough that ink stays legible when highlighted over. `Palette.markerBlend`
+remains defined but has no call site — `PKInkingTool` exposes no blend-mode
+hook for on-screen rendering. The literal always-behind guarantee (most
+likely two coordinated canvas layers) is not planned as follow-up work
+unless raised again later.
+
 **Revised build order (A4), with the INK-3 spike step removed per C-5:**
 
 1. Tokens (Palette incl. `alert` / Motion / Haptics + Assets.xcassets + CLAUDE.md rules block)
