@@ -236,7 +236,26 @@ final class CanvasController: ObservableObject {
     var canUndo: Bool { canvasView?.undoManager?.canUndo ?? false }
     var canRedo: Bool { canvasView?.undoManager?.canRedo ?? false }
 
-    func undo() { canvasView?.undoManager?.undo() }
+    /// Bounds of whatever undo just removed, and a generation counter so
+    /// InkCanvasView can tell "new removal" from "same removal it already
+    /// flashed" — same pattern as `restoreGeneration`. INK-8: this is how a
+    /// single undo can show which stroke left, whether triggered from the
+    /// toolbar or the two-finger tap gesture — both call this one method.
+    @Published private(set) var lastRemovedBounds: CanvasRect?
+    @Published private(set) var removalGeneration = 0
+
+    func undo() {
+        let before = document?.inkStrokes ?? []
+        canvasView?.undoManager?.undo()
+
+        let afterIDs = Set((document?.inkStrokes ?? []).map(\.id))
+        let removed = before.filter { !afterIDs.contains($0.id) }
+        guard !removed.isEmpty else { return }
+
+        lastRemovedBounds = removed.reduce(CanvasRect.zero) { $0.union($1.renderBounds) }
+        removalGeneration += 1
+    }
+
     func redo() { canvasView?.undoManager?.redo() }
 
     func clear() {

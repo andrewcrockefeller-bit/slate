@@ -81,6 +81,27 @@ struct InkCanvasView: UIViewRepresentable {
         doubleTap.numberOfTouchesRequired = 2
         canvas.addGestureRecognizer(doubleTap)
 
+        // INK-8: two-finger tap undoes, three-finger tap redoes. The
+        // two-finger single tap must wait for the two-finger double-tap
+        // above to fail, or every double-tap-to-reset would also fire a
+        // spurious undo first.
+        let undoTap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleUndoTap)
+        )
+        undoTap.numberOfTapsRequired = 1
+        undoTap.numberOfTouchesRequired = 2
+        undoTap.require(toFail: doubleTap)
+        canvas.addGestureRecognizer(undoTap)
+
+        let redoTap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleRedoTap)
+        )
+        redoTap.numberOfTapsRequired = 1
+        redoTap.numberOfTouchesRequired = 3
+        canvas.addGestureRecognizer(redoTap)
+
         return canvas
     }
 
@@ -97,6 +118,15 @@ struct InkCanvasView: UIViewRepresentable {
         if context.coordinator.appliedTool != desiredTool {
             context.coordinator.appliedTool = desiredTool
             canvas.tool = ToolSelection.pencilKitTool(for: desiredTool)
+        }
+
+        // INK-8: flash whatever undo just removed — covers both the
+        // toolbar Undo button and the two-finger tap gesture, since both
+        // funnel through CanvasController.undo().
+        if context.coordinator.appliedRemovalGeneration != controller.removalGeneration,
+           let bounds = controller.lastRemovedBounds {
+            context.coordinator.appliedRemovalGeneration = controller.removalGeneration
+            context.coordinator.flashRemoval(bounds, in: canvas)
         }
 
         // The only thing ever pushed down: repainting the canvas from a
@@ -135,6 +165,26 @@ struct InkCanvasView: UIViewRepresentable {
         /// `updateUIView` — compared so an unrelated SwiftUI update never
         /// reassigns the tool mid-stroke.
         var appliedTool: AppliedTool?
+
+        /// The removal batch already flashed. See `updateUIView`.
+        var appliedRemovalGeneration = 0
+
+        /// Reused across flashes rather than recreated — added to `canvas`
+        /// lazily on first use.
+        private lazy var undoFlashView: UIView = {
+            let view = UIView()
+            view.backgroundColor = UIColor(Palette.pen).withAlphaComponent(0.18)
+            view.layer.cornerRadius = 6
+            view.isUserInteractionEnabled = false
+            view.alpha = 0
+            return view
+        }()
+
+        /// The union of everything flashed since the last fade-out —
+        /// INK-8's "batch rapid undos into a single visual sweep" rather
+        /// than a separate flash per undo.
+        private var undoFlashUnion: CanvasRect?
+        private var undoFlashFadeTask: Task<Void, Never>?
 
         init(controller: CanvasController) {
             self.controller = controller
@@ -203,6 +253,53 @@ struct InkCanvasView: UIViewRepresentable {
             guard let scrollView = gesture.view as? UIScrollView else { return }
             Haptics.toolSelect()
             settle(scrollView, to: 1.0, from: scrollView.zoomScale, velocity: 0)
+        }
+
+        // MARK: - Undo / redo (INK-8)
+
+        @objc func handleUndoTap(_ gesture: UITapGestureRecognizer) {
+            controller.undo()
+        }
+
+        @objc func handleRedoTap(_ gesture: UITapGestureRecognizer) {
+            controller.redo()
+        }
+
+        /// Shows which stroke(s) undo just removed. A translucent highlight
+        /// over the removed bounds, not a literal reverse-draw of the stroke
+        /// path — `PKCanvasView` renders its `.drawing` internally, with no
+        /// per-stroke handle this view can animate directly. Position is
+        /// computed manually (content coordinates × zoomScale) rather than
+        /// relying on implicit subview scaling, since PencilKit's zoom isn't
+        /// the standard "scale a content subview" UIScrollView pattern —
+        /// this hasn't been checked against a live pinch/pan in progress.
+        func flashRemoval(_ bounds: CanvasRect, in canvas: PKCanvasView) {
+            undoFlashFadeTask?.cancel()
+
+            let union = undoFlashUnion?.union(bounds) ?? bounds
+            undoFlashUnion = union
+
+            if undoFlashView.superview !== canvas {
+                canvas.addSubview(undoFlashView)
+            }
+            canvas.bringSubviewToFront(undoFlashView)
+
+            undoFlashView.frame = CGRect(
+                x: union.minX * canvas.zoomScale,
+                y: union.minY * canvas.zoomScale,
+                width: union.size.width * canvas.zoomScale,
+                height: union.size.height * canvas.zoomScale
+            )
+            undoFlashView.alpha = 1
+
+            undoFlashFadeTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(Motion.undoStroke))
+                guard let self, !Task.isCancelled else { return }
+                UIView.animate(withDuration: Motion.undoStroke) {
+                    self.undoFlashView.alpha = 0
+                }
+                self.undoFlashUnion = nil
+            }
         }
 
         /// How far ahead (in scale units, per unit of gesture velocity) to
