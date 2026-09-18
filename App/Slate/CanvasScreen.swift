@@ -12,6 +12,7 @@ struct CanvasScreen: View {
     let environment: AppEnvironment
 
     @StateObject private var controller: CanvasController
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -70,7 +71,26 @@ struct CanvasScreen: View {
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.bordered)
-        .background(.thinMaterial, in: Capsule())
+        // The app's one Liquid Glass surface — see docs/DS-CONFLICTS.md, C-1.
+        // Regular variant only, never Clear, and nothing else in the app may
+        // be translucent. Falls back to an opaque Palette.surface capsule
+        // both under Reduce Transparency and on OS versions before Liquid
+        // Glass existed.
+        .modifier(GlassToolbarSurface(reduceTransparency: reduceTransparency))
+    }
+
+    /// The one allowed translucent surface in the app. Everywhere else is
+    /// opaque — see the "Slate design rules" block in CLAUDE.md.
+    private struct GlassToolbarSurface: ViewModifier {
+        let reduceTransparency: Bool
+
+        func body(content: Content) -> some View {
+            if #available(iOS 26.0, *), !reduceTransparency {
+                content.glassEffect(.regular, in: Capsule())
+            } else {
+                content.background(Palette.surface, in: Capsule())
+            }
+        }
     }
 
     /// Reports what the domain model captured and whether it reached disk —
@@ -85,7 +105,7 @@ struct CanvasScreen: View {
                 .font(.system(.caption2, design: .monospaced))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(Color.secondary.opacity(0.15), in: Capsule())
+                .background(Palette.hairline, in: Capsule())
 
             Text(controller.lastCapture)
                 .font(.system(.caption2, design: .monospaced))
@@ -93,10 +113,12 @@ struct CanvasScreen: View {
 
             saveIndicator
         }
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Palette.inkSoft)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(.thinMaterial, in: Capsule())
+        // Opaque — only the floating canvas toolbar (editingControls) is
+        // translucent. See docs/DS-CONFLICTS.md, C-1.
+        .background(Palette.surface, in: Capsule())
     }
 
     @ViewBuilder
@@ -114,13 +136,13 @@ struct CanvasScreen: View {
         case .saved:
             Text("saved")
                 .font(.system(.caption2, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.inkSoft)
         case .failed(let reason):
             // Loud on purpose. A failed write with a calm status line is how a
             // student loses an hour of work without noticing.
             Text("SAVE FAILED: \(reason)")
                 .font(.system(.caption2, design: .monospaced).weight(.semibold))
-                .foregroundStyle(.red)
+                .foregroundStyle(Palette.alert)
                 .lineLimit(1)
         }
     }
