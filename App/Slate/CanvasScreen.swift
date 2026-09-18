@@ -20,6 +20,8 @@ struct CanvasScreen: View {
     @State private var markerIndex = 0
     @State private var isChromeDimmed = false
     @State private var chromeReturnTask: Task<Void, Never>?
+    @State private var isScaleHUDVisible = false
+    @State private var scaleHUDFadeTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     init(environment: AppEnvironment) {
@@ -67,8 +69,39 @@ struct CanvasScreen: View {
                 .padding(.bottom, 20)
                 .opacity(isChromeDimmed ? 0.25 : 1.0)
         }
+        .overlay {
+            if isScaleHUDVisible {
+                Text("\(Int((controller.zoomScale * 100).rounded()))%")
+                    .font(.system(.callout, design: .monospaced).weight(.semibold))
+                    .foregroundStyle(Palette.graphite)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Palette.surface, in: Capsule())
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+        }
         .task {
             await controller.start()
+        }
+        // INK-7: the scale HUD appears the moment a pinch begins and stays
+        // up through the gesture; once it ends, it waits Motion.scaleHUD
+        // before fading — the delay is the named constant, not the fade
+        // itself.
+        .onChange(of: controller.isZooming) { _, isZooming in
+            scaleHUDFadeTask?.cancel()
+
+            if isZooming {
+                isScaleHUDVisible = true
+            } else {
+                scaleHUDFadeTask = Task {
+                    try? await Task.sleep(for: .seconds(Motion.scaleHUD))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(Motion.adaptive(Motion.standard)) {
+                        isScaleHUDVisible = false
+                    }
+                }
+            }
         }
         // UI-3: chrome yields to the pencil. Drops the moment a stroke
         // begins; the return is debounced by Motion.chromeFade so rapid

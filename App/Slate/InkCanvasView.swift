@@ -29,6 +29,9 @@ struct InkCanvasView: UIViewRepresentable {
     static let minimumZoom: CGFloat = 0.25
     static let maximumZoom: CGFloat = 4.0
 
+    /// INK-7's "nearest sensible scale step." Spans minimumZoom...maximumZoom.
+    static let zoomSteps: [CGFloat] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0]
+
     func makeUIView(context: Context) -> PKCanvasView {
         let canvas = PaperCanvasView()
 
@@ -68,6 +71,15 @@ struct InkCanvasView: UIViewRepresentable {
 
         canvas.becomeFirstResponder()
         controller.canvasView = canvas
+
+        // INK-7: two-finger double-tap returns to exactly 100%.
+        let doubleTap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleDoubleTapToReset)
+        )
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.numberOfTouchesRequired = 2
+        canvas.addGestureRecognizer(doubleTap)
 
         return canvas
     }
@@ -156,6 +168,67 @@ struct InkCanvasView: UIViewRepresentable {
         /// spurious records.
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
             controller.ingest(canvasView.drawing)
+        }
+
+        // MARK: - Zoom (INK-7)
+        //
+        // `PKCanvasViewDelegate` extends `UIScrollViewDelegate`, so these
+        // live on the same coordinator as the drawing callbacks above.
+
+        func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
+            controller.zoomGestureDidBegin()
+        }
+
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            controller.zoomDidChange(to: scrollView.zoomScale)
+        }
+
+        /// Pinch released. Settles to the nearest step in `InkCanvasView.
+        /// zoomSteps`, projected slightly ahead by the pinch's release
+        /// velocity so a fast release visibly lands a step further in the
+        /// direction of motion — not a hard snap to whatever step happens to
+        /// be nearest the raw release point.
+        func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
+            controller.zoomGestureDidEnd()
+
+            let velocity = scrollView.pinchGestureRecognizer?.velocity ?? 0
+            let projected = scale + velocity * Self.velocityLookahead
+            let clamped = min(max(projected, InkCanvasView.minimumZoom), InkCanvasView.maximumZoom)
+            let target = InkCanvasView.zoomSteps.min(by: { abs($0 - clamped) < abs($1 - clamped) }) ?? scale
+
+            settle(scrollView, to: target, from: scale, velocity: velocity)
+        }
+
+        @objc func handleDoubleTapToReset(_ gesture: UITapGestureRecognizer) {
+            guard let scrollView = gesture.view as? UIScrollView else { return }
+            Haptics.toolSelect()
+            settle(scrollView, to: 1.0, from: scrollView.zoomScale, velocity: 0)
+        }
+
+        /// How far ahead (in scale units, per unit of gesture velocity) to
+        /// project before picking the nearest step. Not a Motion value —
+        /// this shapes step *selection*, not an animation's timing.
+        private static let velocityLookahead: CGFloat = 0.15
+
+        /// Drives `zoomScale` with a `UIViewPropertyAnimator` rather than
+        /// `withAnimation`/`Motion.adaptive(_:)` — SwiftUI's animation
+        /// modifiers only affect SwiftUI-owned state, not a UIKit property
+        /// like `UIScrollView.zoomScale`, so Reduce Motion is checked
+        /// directly here instead.
+        private func settle(_ scrollView: UIScrollView, to target: CGFloat, from current: CGFloat, velocity: CGFloat) {
+            let distance = target - current
+            let initialVelocity = distance == 0 ? .zero : CGVector(dx: velocity / distance, dy: 0)
+
+            let animator = UIViewPropertyAnimator(
+                duration: UIAccessibility.isReduceMotionEnabled ? 0.15 : Motion.settleResponse,
+                timingParameters: UIAccessibility.isReduceMotionEnabled
+                    ? UICubicTimingParameters(animationCurve: .easeInOut)
+                    : Motion.settleSpringTiming(initialVelocity: initialVelocity)
+            )
+            animator.addAnimations {
+                scrollView.zoomScale = target
+            }
+            animator.startAnimation()
         }
     }
 }

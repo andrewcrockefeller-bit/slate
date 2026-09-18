@@ -25,4 +25,14 @@ enum Motion {
             ? .easeInOut(duration: 0.15)
             : animation
     }
+
+    /// UIKit twin of `.settle` (response: 0.30, dampingFraction: 0.78) —
+    /// same numbers, not a new value. `UIViewPropertyAnimator` can't consume
+    /// a SwiftUI `Animation` directly, and INK-7's zoom-settle drives
+    /// `UIScrollView.zoomScale`, a UIKit property, so it needs this form
+    /// instead. Added for INK-7 — not in the original token spec.
+    static func settleSpringTiming(initialVelocity: CGVector = .zero) -> UISpringTimingParameters {
+        UISpringTimingParameters(dampingRatio: 0.78, initialVelocity: initialVelocity)
+    }
+    static let settleResponse: TimeInterval = 0.30
 }

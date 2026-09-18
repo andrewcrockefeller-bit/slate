@@ -39,6 +39,12 @@ final class CanvasController: ObservableObject {
     /// UI-3 dims the chrome while this is true — see CanvasScreen.
     @Published private(set) var isPencilDown = false
 
+    /// INK-7's zoom state. `zoomScale` updates live during a pinch (for the
+    /// scale HUD's percentage); `isZooming` brackets the gesture the same
+    /// way `isPencilDown` brackets a stroke.
+    @Published private(set) var zoomScale: CGFloat = 1.0
+    @Published private(set) var isZooming = false
+
     /// Bumped when the canvas should be repainted from the document.
     ///
     /// A counter rather than a flag because the view has to be able to tell
@@ -241,6 +247,12 @@ final class CanvasController: ObservableObject {
 
     func pencilDidTouchDown() { isPencilDown = true }
     func pencilDidLift() { isPencilDown = false }
+
+    // MARK: - Zoom state (INK-7)
+
+    func zoomDidChange(to scale: CGFloat) { zoomScale = scale }
+    func zoomGestureDidBegin() { isZooming = true }
+    func zoomGestureDidEnd() { isZooming = false }
 
     // MARK: - Debug evaluation (M4)
 
