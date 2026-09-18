@@ -15,6 +15,9 @@ struct CanvasScreen: View {
     @State private var isShowingAPIKeySettings = false
     @State private var isShowingDebugResult = false
     @State private var paperStyle: PaperStyle = .plain
+    @State private var toolKind: ToolKind = .fountainPen
+    @State private var inkIndex = 0
+    @State private var markerIndex = 0
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     init(environment: AppEnvironment) {
@@ -38,8 +41,14 @@ struct CanvasScreen: View {
         // the palette exactly when the canvas is in use. Found by running it,
         // not by reading it.
         ZStack(alignment: .topLeading) {
-            InkCanvasView(controller: controller, paperStyle: paperStyle)
-                .ignoresSafeArea()
+            InkCanvasView(
+                controller: controller,
+                paperStyle: paperStyle,
+                toolKind: toolKind,
+                inkIndex: inkIndex,
+                markerIndex: markerIndex
+            )
+            .ignoresSafeArea()
 
             statusLine
                 .padding(.horizontal, 20)
@@ -49,6 +58,10 @@ struct CanvasScreen: View {
             editingControls
                 .padding(.horizontal, 20)
                 .padding(.vertical, 14)
+        }
+        .overlay(alignment: .bottom) {
+            toolTray
+                .padding(.bottom, 20)
         }
         .task {
             await controller.start()
@@ -145,6 +158,61 @@ struct CanvasScreen: View {
             }
         } label: {
             Label("Paper", systemImage: paperStyle.symbolName)
+        }
+    }
+
+    /// INK-4: exactly four tools, six inks, three markers. No color wheel,
+    /// eyedropper, or hex field — swatches only. Opaque (Palette.surface),
+    /// not glass — editingControls is the app's one Liquid Glass surface,
+    /// see docs/DS-CONFLICTS.md, C-1.
+    private var toolTray: some View {
+        VStack(spacing: 10) {
+            if toolKind.usesInkPalette {
+                swatchRow(colors: Palette.inks, selectedIndex: $inkIndex)
+            } else if toolKind.usesMarkerPalette {
+                swatchRow(colors: Palette.markers, selectedIndex: $markerIndex)
+            }
+
+            HStack(spacing: 12) {
+                ForEach(ToolKind.allCases, id: \.rawValue) { kind in
+                    Button {
+                        Haptics.toolSelect()
+                        toolKind = kind
+                    } label: {
+                        Image(systemName: kind.symbolName)
+                            .font(.system(size: 18, weight: .medium))
+                            .frame(width: 44, height: 44)
+                            .background(
+                                kind == toolKind ? Palette.hairline : Color.clear,
+                                in: Circle()
+                            )
+                    }
+                    .foregroundStyle(Palette.graphite)
+                    .accessibilityLabel(kind.label)
+                }
+            }
+        }
+        .padding(12)
+        .background(Palette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private func swatchRow(colors: [Color], selectedIndex: Binding<Int>) -> some View {
+        HStack(spacing: 10) {
+            ForEach(colors.indices, id: \.self) { index in
+                Button {
+                    Haptics.toolSelect()
+                    selectedIndex.wrappedValue = index
+                } label: {
+                    Circle()
+                        .fill(colors[index])
+                        .frame(width: 26, height: 26)
+                        .overlay {
+                            if index == selectedIndex.wrappedValue {
+                                Circle().stroke(Palette.graphite, lineWidth: 2)
+                            }
+                        }
+                }
+            }
         }
     }
 

@@ -12,6 +12,9 @@ struct InkCanvasView: UIViewRepresentable {
 
     @ObservedObject var controller: CanvasController
     var paperStyle: PaperStyle
+    var toolKind: ToolKind
+    var inkIndex: Int
+    var markerIndex: Int
 
     /// The drawable extent, in points.
     ///
@@ -53,10 +56,18 @@ struct InkCanvasView: UIViewRepresentable {
             y: (Self.canvasExtent.height - canvas.bounds.height) / 2
         )
 
-        canvas.tool = PKInkingTool(.pen, color: .label, width: 3)
+        // INK-4: exactly four tools, driven by our own tray rather than
+        // PKToolPicker — see docs/DS-CONFLICTS.md, C-2. No system tool
+        // picker is attached at all, so there is no system color wheel,
+        // eyedropper, or extra tool to reach for. `.fountainPen`/`.pencil`
+        // are PencilKit's own ink types, so pressure/tilt rendering is
+        // unchanged from what M1 verified on device.
+        let initialTool = AppliedTool(kind: toolKind, inkIndex: inkIndex, markerIndex: markerIndex)
+        canvas.tool = ToolSelection.pencilKitTool(for: initialTool)
+        context.coordinator.appliedTool = initialTool
 
+        canvas.becomeFirstResponder()
         controller.canvasView = canvas
-        context.coordinator.attachToolPicker(to: canvas)
 
         return canvas
     }
@@ -65,6 +76,16 @@ struct InkCanvasView: UIViewRepresentable {
         // Cheap regardless of whether it changed — PaperBackground caches
         // the tiled UIColor, so this is a dictionary lookup, not a redraw.
         (canvas as? PaperCanvasView)?.paperStyle = paperStyle
+
+        // Only reassign `canvas.tool` when the selection actually changed.
+        // This view updates on every controller publish (e.g. lastCapture
+        // while drawing); reassigning the tool on each of those would be
+        // visible mid-stroke.
+        let desiredTool = AppliedTool(kind: toolKind, inkIndex: inkIndex, markerIndex: markerIndex)
+        if context.coordinator.appliedTool != desiredTool {
+            context.coordinator.appliedTool = desiredTool
+            canvas.tool = ToolSelection.pencilKitTool(for: desiredTool)
+        }
 
         // The only thing ever pushed down: repainting the canvas from a
         // document that was just loaded from disk. Assigning `canvas.drawing`
@@ -92,21 +113,19 @@ struct InkCanvasView: UIViewRepresentable {
     final class Coordinator: NSObject, PKCanvasViewDelegate {
 
         private let controller: CanvasController
-        private let toolPicker = PKToolPicker()
 
         /// The restore the canvas has already painted. Starts at zero, which
         /// is also the controller's value before anything is loaded, so a fresh
         /// empty canvas does no work.
         var appliedRestoreGeneration = 0
 
+        /// The tool selection already pushed onto `canvas.tool`. See
+        /// `updateUIView` — compared so an unrelated SwiftUI update never
+        /// reassigns the tool mid-stroke.
+        var appliedTool: AppliedTool?
+
         init(controller: CanvasController) {
             self.controller = controller
-        }
-
-        func attachToolPicker(to canvas: PKCanvasView) {
-            toolPicker.addObserver(canvas)
-            toolPicker.setVisible(true, forFirstResponder: canvas)
-            canvas.becomeFirstResponder()
         }
 
         /// Called when a drawing sequence finishes — pen up.
